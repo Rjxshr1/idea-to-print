@@ -1,0 +1,4 @@
+interface:
+  display_name: "3D Print Workflow"
+  short_description: "Size, check, slice and dispatch authorized FDM print jobs"
+  default_prompt: "Use $3d-print-workflow to prepare my selected model for my printer and verify the actual slice before authorized dispatch."

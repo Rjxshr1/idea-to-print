@@ -1,0 +1,6 @@
+interface:
+  display_name: "Idea to Print / 一句话造物"
+  short_description: "Turn an idea or uploaded image into a printable 3D sculpture"
+  default_prompt: "Use $idea-to-print with my attached image to make a 160 mm printable sculpture and show the actual model before printing."
+policy:
+  allow_implicit_invocation: true

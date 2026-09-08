@@ -1,0 +1,131 @@
+# Idea to Print · 一句话造物
+
+从一句话或上传图片开始，制作可检查、可调整尺寸的3D模型，再衔接FDM打印。
+
+[English](README.en.md) · [MIT License](LICENSE) · [安装与资源要求](docs/requirements.md)
+
+这是可安装的 **3个Agent skills和配套Python工具**。由具备文件、图像和桌面工具的Agent执行流程；仓库不提供网页上传站点、通用自动雕刻引擎或无人值守打印服务。
+
+```mermaid
+flowchart LR
+  A[一句话描述] --> B[生成候选图并选择]
+  C[上传 PNG / JPEG / WebP] --> D[选定参考图]
+  B --> D
+  D --> E[图生3D初稿]
+  E --> F[真实模型检查与打印适配]
+  F --> G[切片和支撑检查]
+  G --> H[已授权的打印与状态核验]
+```
+
+## 两种用法
+
+在安装了技能、具备对应工具的Codex中：
+
+> 用 $idea-to-print 做一只飘逸的狐狸，纯白，整体最长16厘米，有稳定底座，支撑好拆，先出几张图让我选。
+
+或者直接附上图片：
+
+> 用 $idea-to-print 把这张图片做成16厘米的可打印模型，给我看实际模型的正面和背面。
+
+上传图已被明确选中时，会跳过概念出图和选图。照片、插画、效果图均可作为参考；单图看不到的背面仍需推断和检查。
+
+需要打印时可以说：
+
+> 就用这个模型打印，打印板已清空，使用白色PLA。
+
+同一任务已经给出的授权和事实会沿用。只要求出图或建模时，流程在相应成果处结束。
+
+## 安装
+
+需要Python3.11或更高版本。以下命令在仓库根目录执行：
+
+```bash
+git clone https://github.com/Rjxshr1/idea-to-print.git
+cd idea-to-print
+python -m venv .venv
+# Linux / macOS / WSL
+source .venv/bin/activate
+# Windows PowerShell 使用：.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python install.py --destination ~/.agents/skills
+```
+
+`--destination`应指向Agent实际识别的技能目录；使用其他布局的客户端可传入自己的路径，例如`~/.codex/skills`。安装器先检查全部目标，已有同名技能时会停止并保留它们。它只安装本仓库的技能和脚本；图像生成、桌面控制、Blender、Bambu Studio和账号权限由运行环境另外提供。
+
+安装器在每个已安装技能中写入本地`runtime.local.json`，记录运行安装器的Python绝对路径。请在上面已激活的虚拟环境中运行安装器，并保留该环境。Agent在其他工作目录中使用技能时，会按实际技能目录定位脚本，使用记录的Python和绝对任务路径；不会假定当前目录就是仓库。移动或删除虚拟环境后需要更新本地运行环境记录。手动复制技能的用户需自行指定装有依赖的Python。
+
+安装包含：
+
+| 技能 | 作用 |
+|---|---|
+| `idea-to-print` | 文字/上传图片入口，选择记录，衔接各阶段 |
+| `printable-modeling` | 图生3D草稿、模型检查、修复方法和毫米尺寸适配 |
+| `3d-print-workflow` | 网格/切片检查、机器配置、发送前检查和结果核验 |
+
+## 直接使用图片与命令行工具
+
+这部分不依赖内置ImageGen。`prepare_image.py`只在本地保存文件，完全保留原图字节：
+
+```bash
+python skills/idea-to-print/scripts/prepare_image.py \
+  --image /path/to/reference.png --job jobs/my-sculpture \
+  --target-mm 160 --brief "Stable base and accessible removable supports"
+```
+
+输入支持静态PNG、JPEG、WebP；本地入口限制为64MiB、4000万像素。已有任务目录不被覆盖。随后可选择调用已适配的公共图生3D服务：
+
+```bash
+# 只读取当前服务的API描述
+python skills/printable-modeling/scripts/hunyuan_shape.py --describe-api
+
+# 此命令才会上传所选图片并发起生成
+python skills/printable-modeling/scripts/hunyuan_shape.py \
+  --job jobs/my-sculpture --input source/selected.png --attempt shape-v1
+```
+
+JPEG/WebP使用`job.json`里记录的实际输入路径。模型保存在`source/shape-shape-v1.glb`；脚本不会切片或发起打印。公共服务地址为[腾讯Hunyuan3D-2.1演示](https://huggingface.co/spaces/tencent/Hunyuan3D-2.1)，实测路线使用匿名访问、不需要API Key，但它可能排队、休眠或改变访问条件。要求图片留在本地时，不使用此适配器。
+
+已经生成但响应解析失败时，可以恢复缓存，避免再发起一轮生成：
+
+```bash
+python skills/printable-modeling/scripts/hunyuan_shape.py \
+  --job jobs/my-sculpture --attempt shape-v1 --recover
+```
+
+随后在Blender中检查真实模型的正面、侧面、背面和底部，按实际缺陷修复并导出STL。该阶段由Agent结合模型执行，**不是通用于所有图片的自动修复函数**。可选网格依赖：
+
+```bash
+python -m pip install -r requirements-modeling.txt
+python skills/3d-print-workflow/scripts/print_audit.py mesh jobs/my-sculpture/outputs/model.stl
+python skills/3d-print-workflow/scripts/print_audit.py fit \
+  --dimensions 160 65 85 --volume 180 180 180 --clearance 10 10 5
+python skills/3d-print-workflow/scripts/print_audit.py slice jobs/my-sculpture/outputs/ready.gcode.3mf
+```
+
+网格检查不覆盖所有自交、壁厚或稳定性问题；缩放计算也不代替实际切片范围检查。具体边界见各脚本输出和技能说明。
+
+## 打印机连接
+
+Bambu Studio单独安装，配置自己的打印机、喷嘴、打印板和耗材。打印通过官方界面，桌面控制工具由Agent宿主提供；没有桌面控制时，可手动打开检查后的文件并发送。仓库里没有自动启动打印的脚本。
+
+可选的[Bambu只读状态工具](skills/3d-print-workflow/references/bambu-lan.md)使用自己的局域网配置和本机Studio凭据；示例配置只有占位符。不要提交真实设备地址、序列号、访问码或相机画面。`jobs/`、`*.local.json`和输出文件默认被Git忽略。
+
+另有一个处理特定Bambu切片容器的辅助工具，严格限定已验证的版本和单盘格式。详见[切片包说明](skills/3d-print-workflow/references/slice-only.md)，不要把它当成所有3MF的通用转换器。
+
+## 验证与边界
+
+- 这套方法曾完成概念图→图生三维→模型修复→切片→真实打印机接收/准备；不把设备接收等同于实物质量合格。
+- 本仓库自动化测试使用合成图片、GLB、STL和3MF及模拟服务响应。CI不上传图片、不运行大模型、不操作打印机。
+- 图片生成和3D重建服务在云端运行时，本机不需要为它们加载模型或占用推理显存。Blender/切片的内存消耗取决于模型复杂度。未测定统一最低内存，也不要求64GB。详见[资源要求](docs/requirements.md)。
+- 生成效果图不等于可打印几何；单图重建可能改变背面或细节。支撑类型名称不证明好拆，最终需要实际支撑路径检查和打印反馈。
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+## 许可证与贡献
+
+本仓库原创说明、脚本、测试和参数化示例采用MIT许可证。外部模型、服务、软件和用户图片遵循各自条款，见[NOTICE](NOTICE.md)。不分发模型权重、第三方插件代码或私人的打印任务。
+
+欢迎通过Issue报告复现步骤、工具版本和已脱敏的错误，通过Pull Request改进适配器、检查或文档。提交前运行离线测试，不要在测试中连接真实打印机。

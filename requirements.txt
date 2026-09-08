@@ -1,0 +1,3 @@
+# Python 3.11+. Needed for uploaded-image intake and the hosted shape route.
+Pillow>=10,<13
+gradio_client>=2.6,<3

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Printable Modeling"
+  short_description: "Turn references into editable, checked printable geometry"
+  default_prompt: "Use $printable-modeling to turn my uploaded image into a printable model with editable source and verified mesh previews."
