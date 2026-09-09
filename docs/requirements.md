@@ -1,41 +1,54 @@
-# 安装、内存、显存与API要求
+# 安装与运行要求
 
-| 环节 | 实际工具 | 安装/账号 | 本机计算需求 |
+本项目支持上传参考图、云端生成初始几何、Blender 建模与检查、Bambu Studio 切片，以及可选的打印机状态读取。文字生成参考图由宿主的图像工具提供；已有图片可以直接使用。
+
+## 按功能安装
+
+Python 脚本要求 Python 3.11+。在仓库根目录创建虚拟环境后，根据需要安装依赖：
+
+```sh
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-hunyuan31.txt
+python -m pip install -r requirements-modeling.txt
+```
+
+| 功能 | 工具与依赖 | 账号或配置 | 计算位置 |
 |---|---|---|---|
-| 文字生成图片，可选 | 宿主提供的图像生成工具，例如Codex ImageGen | 宿主必须提供该能力；内置调用不要求用户另配OpenAI API Key | 云端生成，本机不加载图片模型 |
-| 上传图片入口 | Python3.11+、Pillow | `requirements.txt`；不需要账号或API | 本地文件验证/复制；不自动上传 |
-| 已适配的脚本图生3D | 公共Hunyuan3D-2.1服务、`gradio_client` | `requirements.txt`；实测匿名调用，需联网；不保证一直无需登录 | 推理发生在服务端，不占本机推理显存 |
-| 已实测的高模网页路线 | 腾讯官方Hunyuan3D V3.1网页 | 自己的登录账号、可用额度、宿主浏览器工具或手动操作 | 云端推理，不占本机推理显存 |
-| V2官方3.1 API，可选 | `hunyuan31_api.py`、腾讯官方SDK | `requirements-hunyuan31.txt`，显式API凭据与可用额度；`config-check`不调用生成 | 云端推理，独立记录提交与恢复 |
-| 真实几何检查与修改 | Blender、可选网格库 | Blender单独安装；`requirements-modeling.txt` | 主要依赖CPU/RAM，可用CPU渲染；GPU渲染可选 |
-| 切片 | Bambu Studio或适用切片器 | 单独安装并选择真实机器/材料配置 | 主要CPU/RAM；图形预览需适用图形环境 |
-| 发送 | 官方打印界面、可选宿主桌面控制 | 本机或云端设备连接；不是公共API Key；自动桌面控制须由宿主提供 | 需要可用桌面会话；打印本身由设备执行 |
-| 可选状态/相机 | Python标准库、实验性Bambu只读适配器 | 自己的私网设备配置和Studio本机访问码；其他OS明确指定配置路径 | 很低；无需推理GPU |
+| 上传图片、整理参考图 | `requirements.txt` 中的 Pillow | 本地图片和作业目录 | 本机 CPU；图片接收步骤仅验证和复制文件 |
+| 官方 Hunyuan3D 3.1 图生模型 | `hunyuan31_api.py`；`requirements-hunyuan31.txt` | 腾讯云 API 凭据、服务权限和可用额度 | 云端 |
+| 公共 Hunyuan3D 2.1 图生模型 | `hunyuan_shape.py`；`requirements.txt` 中的 `gradio_client` | 公共服务可访问；脚本采用匿名连接 | 云端 |
+| Hunyuan3D Studio 网页生成 | 官方网页；宿主浏览器工具或手动操作 | 用户登录账号和可用额度 | 云端 |
+| 几何处理与检查 | 单独安装 Blender；`requirements-modeling.txt` | 模型尺寸、方向和处理配置 | 本机 CPU/RAM；渲染可用 CPU |
+| 切片与预览 | 单独安装 Bambu Studio | 机器、材料和工艺配置 | 本机 CPU/RAM；图形预览需要桌面环境 |
+| 发送打印任务 | 官方打印界面；可选宿主桌面控制 | 已连接的打印机及对应访问权限 | 本机或云端连接打印机 |
+| 读取打印机状态与相机 | `bambu_read.py`；Python 标准库 | 私网设备地址、序列号和 Studio LAN 访问码 | 本机网络访问 |
 
-## V1检查和服务边界
+`requirements-modeling.txt` 提供 NumPy、SciPy、trimesh、manifold3d 和 rtree。Blender 及其 Python 环境需要单独配置。具体命令见[模型处理管线](../skills/printable-modeling/references/model-pipeline.md)和[修形与验收](../skills/printable-modeling/references/refinement-and-validation.md)。
 
-`refinement_job.py`维护版本、修复记录和文件哈希；`printability_gate.py`使用本地网格依赖按配置输出检查报告。安装`requirements-modeling.txt`后按[修形与验收说明](../skills/printable-modeling/references/refinement-and-validation.md)运行。它们不调用Hunyuan、不替代Blender雕刻，也不发送打印机指令。
+## 官方 3.1 API 配置
 
-Hunyuan官网的产品功能、网页操作和计费API是不同接口。多视图输入数量、登录方式、额度、价格与接口版本应在实际使用时核对官方页面/API文档；不能把网页里可用的功能写成仓库已实现的API能力。没有同口径公开测评时，不给出3.1比2.1提升多少的数字。白模细节需要真实几何，贴图精细不能证明细节能够打印。
+设置 `TENCENTCLOUD_SECRET_ID` 和 `TENCENTCLOUD_SECRET_KEY`；临时凭据另需 `TENCENTCLOUD_TOKEN`。也可用 `--credentials-file` 指定私有 JSON 文件，包含 `secret_id`、`secret_key` 和可选 `token`。凭据保存在环境或私有配置中，不放入作业资料或 Git。
 
-## 内存和显存怎么选
+```sh
+python skills/printable-modeling/scripts/hunyuan31_api.py config-check
+```
 
-本仓库没有对每个步骤测定峰值内存或最低配置，也没有性能保证。云端图生3D路线不要求本机安装CUDA或模型权重，独显不是该服务推理的前提。
+`config-check` 检查 SDK 和配置，不提交生成任务。适配器提供提交、查询、下载和恢复命令，记录远端 JobId 与本地尝试状态。默认使用 `Model=3.1`、几何模式、1,500,000 面目标和 `ap-guangzhou` 区域；补充视图需要绑定图片哈希的一致性检查。初始化作业及完整参数见[官方 API 使用说明](../skills/printable-modeling/references/hunyuan31-api.md)。
 
-本地网格修复、切片和预览的需求随面数、布尔/重建操作、渲染分辨率增长。作为工作站规划建议，可从16GB RAM用于较小模型、32GB用于较复杂雕塑评估；这些是经验建议，**不是本仓库已验证的最低要求**。不要仅因一次成功任务在64GB机器上运行，就将64GB写成依赖。
+公共 2.1 服务和 Studio 网页使用各自的接口与账号方式，不共用腾讯云 API 凭据。云端生成会将选定参考图上传到相应服务；仅接收图片或检查本地配置不会提交生成。各路线命令见[图片生成模型](../skills/printable-modeling/references/image-to-3d.md)。
 
-对原始百万面模型，应先保留原件，评估简化对细节的影响，再决定是否降低面数。避免同时运行多份大模型操作。无法从STL文件大小单独精确推算所需RAM。
+## 本机资源与本地部署
 
-## 如果需要全部本地运行
+云端图生模型不需要本机 CUDA、模型权重或推理显卡。本地网格处理、切片和预览主要消耗 CPU 与 RAM；所需内存随模型面数、几何操作和渲染分辨率增长。处理大型模型时保留高模原件，使用轻量代理预览，再按细节要求设置简化和渲染参数。
 
-当前自带的Hunyuan适配器连接公共2.1服务或官方3.1云端API。仓库没有附带本地Hunyuan推理适配、权重下载器或CUDA安装器；需要按选定模型的上游文档另行部署和验证。显存取决于模型、精度、分辨率、是否包含纹理及卸载策略，此处不声称一个未经测试的数值。
+Blender 管线使用 CPU 渲染。白色 FDM 模型可直接使用几何生成结果，无需纹理生成。
 
-只有白色FDM几何时，纹理生成通常不属于必要步骤。远程服务不可用也不意味着可以擅自切换到收费API；根据现有授权选择可用路线，并保留已完成工作。
+完全离线的图生模型需要另行部署本地推理服务。本仓库提供公共 2.1 服务与官方 3.1 云端 API 适配器；本地模型的权重、CUDA/PyTorch 和显存要求按对应上游项目配置。
 
-## 版本与可移植性
+## 平台与软件配置
 
-- Python helpers：3.11+；CI使用3.11/3.12与Linux/Windows进行离线检查。
-- 原始完整工作路线使用过Blender5.0.1和Bambu Studio02.07.01.62。这是观测版本，不是对所有版本兼容的承诺。
-- `make_slice_only.py`严格要求其已验证的Bambu版本及单盘容器布局；其他格式用官方导出或明确适配后再验证。
-- WSL是Windows机器上运行Linux建模工具的一种选择，并非通用必装依赖。Linux/macOS可用本机环境；桌面控制工具是否支持相应系统需要单独确认。
-- Agent插件、模型服务、Blender和Bambu软件分别安装，遵循各自许可证；本仓库不复制它们的专有能力。
+- Python 工具支持 Linux 和 Windows，CI 覆盖 Python 3.11/3.12。WSL 可用于 Windows 上的 Linux 建模环境。
+- Blender 管线的运行参数和依赖配置见[模型处理管线](../skills/printable-modeling/references/model-pipeline.md)。
+- `make_slice_only.py` 接受 `BambuStudio-02.07.01.62` 生成的指定单盘容器布局；其他布局使用 Studio 官方导出，或先适配转换器。
+- 打印机状态与相机配置见[Bambu LAN 使用说明](../skills/3d-print-workflow/references/bambu-lan.md)。机器参数和访问码放在本地配置中。
+- 宿主图像生成、浏览器和桌面控制均为可选能力；对应功能需要宿主提供工具，或由用户在相应应用中完成。

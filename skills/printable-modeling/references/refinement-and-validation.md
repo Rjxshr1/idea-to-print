@@ -32,8 +32,8 @@ actual view files for a service that expects independent views; extracting tiles
 does not establish that their geometry is consistent. Duplicated files do not add
 views. Resolve contradictory inputs before submission.
 
-The official Tencent Hunyuan3D V3.1 website has been exercised for high-poly
-drafts. Check its currently available mode and account quota when using it.
+The official Tencent Hunyuan3D 3.1 website provides an optional high-poly draft
+route when account access and quota are available.
 The repository's `hunyuan_shape.py` is the separate 2.1 public demo adapter,
 which submits one image. The optional [official 3.1 adapter](hunyuan31-api.md)
 is a separate configured route. See [image-to-3D.md](image-to-3d.md) for the demo
@@ -45,7 +45,7 @@ Keep raw meshes immutable. Register the baseline, then create a new editable and
 exported revision for a concrete defect. Record the operation, affected region,
 parameters, reason and before/after preview paths in a local operations JSON;
 `refinement_job.py` preserves its bytes and hash without interpreting it as a
-Blender program. Repeat until applicable criteria are satisfied or a concrete
+Blender program. Repeat within the job's attempt budgets until applicable criteria are satisfied or a concrete
 remaining limitation needs a design decision.
 
 | Observed defect | Possible local operation | Recheck |
@@ -163,8 +163,7 @@ any automatic geometry `FAIL` still takes precedence. Appearance and slice
 reviews cannot replace these measurements. `status` exposes `coverage` with
 `gate_scoped_status`, `profile_required`, `excluded` and `unknown_full`, so a
 diagnostic gate `PASS` remains distinguishable from full sculpture acceptance.
-Existing scoped records are recomputed from their unchanged tool reports when
-status is read; their old cached `PASS` is not reused as full acceptance.
+Status recomputes acceptance from current artifact hashes and tool reports.
 
 The ledger lives in `job.json.refinement`, preserving unrelated selection,
 authorization and dispatch fields. It rehashes artifacts and evidence when

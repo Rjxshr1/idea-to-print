@@ -1,169 +1,125 @@
 # Idea to Print · 一句话造物
 
-从一句话或上传图片开始，制作可检查、可调整尺寸的3D模型，再衔接FDM打印。
+从一句话、一张参考图或已有模型开始，制作可编辑的 3D 雕塑，完成造型检查、尺寸适配和打印前交付。
 
-[English](README.en.md) · [MIT License](LICENSE) · [安装与资源要求](docs/requirements.md)
+[English](README.en.md) · [安装与资源要求](docs/requirements.md) · [MIT License](LICENSE)
 
-## V2：有限尝试与可靠恢复
+项目包含 **3 个可安装的 Agent 技能和配套 Python 工具**，串联图像生成、混元 3D、Blender 和 Bambu Studio。支持宠物、神兽等有机雕塑，也能从已有 STL/BLEND 开始处理。Agent 根据当前作业状态调用工具，保留每个版本及其检查结果。
 
-宠物与神兽作业可用统一执行账本，按参考、形体、细节、几何和切片分阶段验证。
-默认最多2次生成、3次局部修复、1次参考纠正；连续同类策略无改善会停止，交付最佳候选和未过项。
-当前尝试、最佳候选与已交付版本分开，用户否决不会被Agent评价覆盖。
+## 功能
 
-- `workflow_v2.py` 提供 `init/next/status/record/reconcile/export`，由当前Agent执行唯一下一动作。
-- 可选 `hunyuan31_api.py` 接腾讯官方3.1 API；无JobId的不确定提交不会自动重投，需配置自己的凭据和可用额度。
-- `model_pipeline.py` 做真实高模导入、毫米归一或坐标保留、有限区域操作、导出和最终STL六视图渲染。
-- `slice_pipeline.py` 与Windows `run_bambu_slice.py` 绑定输入、配置、实际切片完成和包校验，不发送打印。
+| 功能 | 提供什么 |
+|---|---|
+| 文字与图片入口 | 生成候选概念、记录设计选择，或直接导入 PNG/JPEG/WebP；保存原图及 SHA256 |
+| 官方图生 3D | 腾讯混元 3.1 官方 SDK 适配器，支持主图和指定补充视角、Geometry 白模及 150 万面请求 |
+| 分阶段造型 | 依次检查参考一致性、轮廓与体积、毛束/鳞片/羽片；分别记录外观和制造结果 |
+| Blender 模型处理 | 保留原始高模，导出 STL、GLB、BLEND 和轻量预览；支持尺寸归一或保留原毫米坐标 |
+| 有限区域修形 | 在指定区域柔化、钝化、加厚，带保护区和位移预算 |
+| 实际模型预览 | 从最终 STL 渲染正面、侧面、左右斜面、背面和底面；支持脸部特写和中断续渲染 |
+| 统一执行账本 | `next/status/record/reconcile/export` 管理阶段、尝试、远端任务及证据；候选、最佳和交付版本分开 |
+| 有限尝试与恢复 | 默认 2 次生成、3 次局部修复、1 次参考纠正；连续无改善退出策略；已有任务继续查询或下载 |
+| Bambu 切片 | 固定摆盘、快照保存机器/工艺/耗材配置，使用 Windows 离线 CLI 切片并核验结果 |
+| 切片预览与交付 | 提取原始 G-code 直接预览，保存关键层截图；导出模型、切片、评价历史和统一文件清单 |
 
-详见[完整V2用法](skills/idea-to-print/references/workflow-v2.md)、
-[官方API配置](skills/printable-modeling/references/hunyuan31-api.md)、
-[建模配置](skills/printable-modeling/references/model-pipeline.md)。
-预览完成、诊断交付与打印检查分别报告；流程跑通不代表造型或实体效果通过。
-
-这是可安装的 **3个Agent skills和配套Python工具**。由具备文件、图像和桌面工具的Agent执行流程；仓库不提供网页上传站点、通用自动雕刻引擎或无人值守打印服务。
+用户与 Agent 的评价分别保存，同一模型的用户否决不会被后续 Agent 评价覆盖。模型、配置或截图变更后，关联检查自动失效。结果保留 `PASS / FAIL / UNKNOWN`；达到尝试上限时，交付最佳候选及未完成项。
 
 ```mermaid
 flowchart LR
-  A[一句话描述] --> B[生成候选图并选择]
-  C[上传 PNG / JPEG / WebP] --> D[选定参考图]
-  B --> D
-  D --> E[Generate：图生3D初始高模]
-  E --> F[Inspect：外观与几何检查]
-  F --> G[Refine：Blender修形和制造适配]
-  G --> H[Validate：带证据的检查结果]
-  H -->|预算内且策略有效| G
-  H -->|无改善或能力不足| K[保留最佳候选与诊断交接]
-  H --> I[Slice：切片与拆撑检查]
-  I --> J[Manufacture：已授权的发送与核验]
+  A[文字 / 参考图] --> B[设计与参考检查]
+  B --> C[混元生成初始模型]
+  D[已有模型] --> E[Blender 形体与细节]
+  C --> E
+  E --> F[实际灰模与几何检查]
+  F -->|预算内修复| E
+  F --> G[Bambu 切片与关键层预览]
+  G --> H[模型 / 切片 / 文件清单]
+  F -->|无改善或能力不足| I[最佳候选与接力材料]
 ```
 
-## V1：设计、修形和制造分开验收
+## 使用示例
 
-图像工具负责设计；Hunyuan负责初始高模；Blender与Agent负责实际修形；检查工具记录证据与未验项；Bambu Studio负责制造参数与切片；Agent衔接版本、授权和设备结果。
+在具备图像、建模和文件工具的 Agent 中：
 
-已实测的高模路线包括**腾讯官方网页Hunyuan3D V3.1**，需要自己的账号和可用额度。`hunyuan_shape.py` **仍是Hunyuan3D-2.1公共演示适配器**；V2另有可选官方3.1 API客户端，配置与实测状态独立。网页操作能力来自Agent宿主，不能通过改服务地址把2.1脚本变成3.1 API。这里不声明3.1相对2.1的同口径提升百分比、当前价格或保证额度。
+> 用 $idea-to-print 做一只飘逸的狐狸，纯白，整体最长 16 厘米，有稳定底座，先出三张概念图让我选。
 
-V1把验收拆为三类：
+附上图片后：
 
-| 报告 | 解决的问题 | 必须保留的边界 |
-|---|---|---|
-| Fidelity（外观） | 是否像参考、姿态和细节是否正确 | 实际模型渲染与参考对比；几何闭合不能代替外观认可 |
-| Geometry（几何） | 拓扑、连接、尺寸及适用的制造约束 | `PASS / FAIL / UNKNOWN`，未测到的问题不能算已通过 |
-| Slice（切片） | 首层、细节成线、支撑、拆除路径和完整占板范围 | 需要实际切片和预览；树状支撑的名称不代表好拆 |
+> 用 $idea-to-print 把这张图片做成 16 厘米的雕塑，保持姿态，给我看实际模型六视图，做到打印前。
 
-工具报告绑定具体模型和配置的SHA256。Agent修复后重新验收；不以“已修好”的文字替代结果。壁厚、细节、连接阈值按部位、喷嘴和材料配置，抽样厚度无异常不证明整个模型都合格。模型尚有未知项时可以继续修形或诊断切片，最终交付和发送必须明确实际检查范围与尚未解决的限制。
+处理已有模型：
 
-多视图可约束背面与侧面，但需要先审查同一姿态、四肢、角、花纹的一致性。保留各独立视图、角度和来源；拼图或同一图片复制多份不算多视图。已选择的设计不会因这一流程被自动重画，简单已有模型也不必重新跑一遍生成链。详见[修形与验收](skills/printable-modeling/references/refinement-and-validation.md)。
+> 检查这个 STL，保持尺寸和造型，完成 A1 mini 白色 PLA 的切片预览，提供模型、切片包和未过项。
 
-## 两种用法
-
-在安装了技能、具备对应工具的Codex中：
-
-> 用 $idea-to-print 做一只飘逸的狐狸，纯白，整体最长16厘米，有稳定底座，支撑好拆，先出几张图让我选。
-
-或者直接附上图片：
-
-> 用 $idea-to-print 把这张图片做成16厘米的可打印模型，给我看实际模型的正面和背面。
-
-上传图已被明确选中时，会跳过概念出图和选图。照片、插画、效果图均可作为参考；单图看不到的背面仍需推断和检查。
-
-需要打印时可以说：
-
-> 就用这个模型打印，打印板已清空，使用白色PLA。
-
-同一任务已经给出的授权和事实会沿用。只要求出图或建模时，流程在相应成果处结束。
+可以只完成概念、模型或打印前交付。需要实际打印时，Agent 在已有授权和设备条件满足后，通过官方打印界面执行。
 
 ## 安装
 
-需要Python3.11或更高版本。以下命令在仓库根目录执行：
+Python 3.11+，Blender 和 Bambu Studio 按需单独安装。
 
 ```bash
 git clone https://github.com/Rjxshr1/idea-to-print.git
 cd idea-to-print
 python -m venv .venv
-# Linux / macOS / WSL
-source .venv/bin/activate
-# Windows PowerShell 使用：.venv\Scripts\Activate.ps1
+source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+
+# 模型处理与官方混元 API
+python -m pip install -r requirements-modeling.txt -r requirements-hunyuan31.txt
+
 python install.py --destination ~/.agents/skills
 ```
 
-`--destination`应指向Agent实际识别的技能目录；使用其他布局的客户端可传入自己的路径，例如`~/.codex/skills`。安装器先检查全部目标，已有同名技能时会停止并保留它们。它只安装本仓库的技能和脚本；图像生成、桌面控制、Blender、Bambu Studio和账号权限由运行环境另外提供。
+将 `--destination` 改为 Agent 实际使用的技能目录，例如 `~/.codex/skills`。目标已有同名技能时，安装器会停止并保留现有内容；新安装会记录当前 Python 的绝对路径。更新已有安装时，合并技能内容并保留本地配置。
 
-安装器在每个已安装技能中写入本地`runtime.local.json`，记录运行安装器的Python绝对路径。请在上面已激活的虚拟环境中运行安装器，并保留该环境。Agent在其他工作目录中使用技能时，会按实际技能目录定位脚本，使用记录的Python和绝对任务路径；不会假定当前目录就是仓库。移动或删除虚拟环境后需要更新本地运行环境记录。手动复制技能的用户需自行指定装有依赖的Python。
-
-安装包含：
-
-| 技能 | 作用 |
+| 技能 | 职责 |
 |---|---|
-| `idea-to-print` | 文字/上传图片入口，选择记录，衔接各阶段 |
-| `printable-modeling` | 图生3D草稿、模型检查、修复方法和毫米尺寸适配 |
-| `3d-print-workflow` | 网格/切片检查、机器配置、发送前检查和结果核验 |
+| `idea-to-print` | 文字/图片入口、设计选择、统一账本和阶段衔接 |
+| `printable-modeling` | 图生 3D、Blender 模型处理、造型检查和尺寸适配 |
+| `3d-print-workflow` | 几何检查、切片、机器配置及打印流程衔接 |
 
-## 直接使用图片与命令行工具
+图像生成与桌面控制由 Agent 宿主提供。混元官方 API 需要腾讯云凭据和可用额度；Blender 与切片在本地运行，云端图生 3D 不占用本机推理显存。
 
-这部分不依赖内置ImageGen。`prepare_image.py`只在本地保存文件，完全保留原图字节：
+## 命令行入口
+
+创建图片作业并查看下一步：
 
 ```bash
 python skills/idea-to-print/scripts/prepare_image.py \
   --image /path/to/reference.png --job jobs/my-sculpture \
-  --target-mm 160 --brief "Stable base and accessible removable supports"
+  --target-mm 160 --brief "White sculpture with a stable base"
+
+python skills/idea-to-print/scripts/workflow_v2.py init --job jobs/my-sculpture
+python skills/idea-to-print/scripts/workflow_v2.py next --job jobs/my-sculpture
+python skills/idea-to-print/scripts/workflow_v2.py status --job jobs/my-sculpture
+
+# 检查官方 API 配置，不发起生成
+python skills/printable-modeling/scripts/hunyuan31_api.py config-check
 ```
 
-输入支持静态PNG、JPEG、WebP；本地入口限制为64MiB、4000万像素。已有任务目录不被覆盖。随后可选择调用已适配的公共图生3D服务：
+参考检查通过后，由 Agent 提交生成、记录实际结果并继续下一阶段。提交响应不确定且没有 JobId 时停止重投；已有 JobId 则继续查询同一任务，下载失败只恢复下载。
+
+| 操作 | 说明 |
+|---|---|
+| 作业状态、审查、恢复与导出 | [统一工作流](skills/idea-to-print/references/workflow-v2.md) |
+| API 凭据、多视图槽位、提交和下载 | [混元 3.1 API](skills/printable-modeling/references/hunyuan31-api.md) |
+| 模型导入、区域操作、渲染和续跑 | [Blender 配置](skills/printable-modeling/references/model-pipeline.md) |
+| 几何检查、版本登记与切片证据 | [模型检查与验证](skills/printable-modeling/references/refinement-and-validation.md) |
+| 其他图生 3D 入口 | [服务适配](skills/printable-modeling/references/image-to-3d.md) |
+| 可选 Bambu 局域网状态读取 | [打印机配置](skills/3d-print-workflow/references/bambu-lan.md) |
+
+## 交付内容
+
+每个选定版本可导出 STL、可编辑 BLEND、实际灰模图、已有切片包、关键层截图和 `manifest.json`。清单绑定文件哈希、模型版本、摆盘、配置和切片器版本；历史评价单独保存。检查通过的预览与带未过项的诊断交付分别标记。
+
+造型评价由 Agent 对照参考与实际模型完成；几何检查说明各自覆盖范围。内置修形算子适合明确的小范围变形，复杂解剖或自然毛流可通过接力材料继续在 Blender 中处理。打印机发送由官方界面完成，配套脚本负责准备、检查及只读状态查询。
+
+## 开发与测试
 
 ```bash
-# 只读取当前服务的API描述
-python skills/printable-modeling/scripts/hunyuan_shape.py --describe-api
-
-# 此命令才会上传所选图片并发起生成
-python skills/printable-modeling/scripts/hunyuan_shape.py \
-  --job jobs/my-sculpture --input source/selected.png --attempt shape-v1
-```
-
-JPEG/WebP使用`job.json`里记录的实际输入路径。模型保存在`source/shape-shape-v1.glb`；脚本不会切片或发起打印。公共服务地址为[腾讯Hunyuan3D-2.1演示](https://huggingface.co/spaces/tencent/Hunyuan3D-2.1)，实测路线使用匿名访问、不需要API Key，但它可能排队、休眠或改变访问条件。要求图片留在本地时，不使用此适配器。
-
-已经生成但响应解析失败时，可以恢复缓存，避免再发起一轮生成：
-
-```bash
-python skills/printable-modeling/scripts/hunyuan_shape.py \
-  --job jobs/my-sculpture --attempt shape-v1 --recover
-```
-
-随后在Blender中检查真实模型的正面、侧面、背面和底部，按实际缺陷修复并导出STL。该阶段由Agent结合模型执行，**不是通用于所有图片的自动修复函数**。可选网格依赖：
-
-```bash
-python -m pip install -r requirements-modeling.txt
-python skills/3d-print-workflow/scripts/print_audit.py mesh jobs/my-sculpture/outputs/model.stl
-python skills/3d-print-workflow/scripts/print_audit.py fit \
-  --dimensions 160 65 85 --volume 180 180 180 --clearance 10 10 5
-python skills/3d-print-workflow/scripts/print_audit.py slice jobs/my-sculpture/outputs/ready.gcode.3mf
-```
-
-`print_audit.py`保留轻量拓扑、尺寸和切片包检查。V1另提供`printability_gate.py`输出带配置、范围和未知项的几何报告；`refinement_job.py`记录修订、修复说明与证据哈希。详见[检查命令与解释](skills/printable-modeling/references/refinement-and-validation.md)。这些工具不会自动雕刻模型，也不覆盖全部自交、壁厚或稳定性问题。缩放计算不代替实际切片范围检查。
-
-## 打印机连接
-
-Bambu Studio单独安装，配置自己的打印机、喷嘴、打印板和耗材。打印通过官方界面，桌面控制工具由Agent宿主提供；没有桌面控制时，可手动打开检查后的文件并发送。仓库里没有自动启动打印的脚本。
-
-可选的[Bambu只读状态工具](skills/3d-print-workflow/references/bambu-lan.md)使用自己的局域网配置和本机Studio凭据；示例配置只有占位符。不要提交真实设备地址、序列号、访问码或相机画面。`jobs/`、`*.local.json`和输出文件默认被Git忽略。
-
-另有一个处理特定Bambu切片容器的辅助工具，严格限定已验证的版本和单盘格式。详见[切片包说明](skills/3d-print-workflow/references/slice-only.md)，不要把它当成所有3MF的通用转换器。
-
-## 验证与边界
-
-- 这套方法曾完成概念图→图生三维→模型修复→切片→真实打印机接收/准备；不把设备接收等同于实物质量合格。
-- 本仓库自动化测试使用合成图片、GLB、STL和3MF及模拟服务响应。CI不上传图片、不运行大模型、不操作打印机。
-- 图片生成和3D重建服务在云端运行时，本机不需要为它们加载模型或占用推理显存。Blender/切片的内存消耗取决于模型复杂度。未测定统一最低内存，也不要求64GB。详见[资源要求](docs/requirements.md)。
-- 生成效果图不等于可打印几何；单图重建可能改变背面或细节。支撑类型名称不证明好拆，最终需要实际支撑路径检查和打印反馈。
-
-```bash
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt -r requirements-hunyuan31.txt
 python -m pytest -q
 ```
 
-## 许可证与贡献
+CI 覆盖 Linux/Windows、Python 3.11/3.12，并包含官方 SDK 合约测试。离线测试使用合成模型和模拟服务响应，覆盖预算、恢复、版本选择、文件锁及证据一致性。
 
-本仓库原创说明、脚本、测试和参数化示例采用MIT许可证。外部模型、服务、软件和用户图片遵循各自条款，见[NOTICE](NOTICE.md)。不分发模型权重、第三方插件代码或私人的打印任务。
-
-欢迎通过Issue报告复现步骤、工具版本和已脱敏的错误，通过Pull Request改进适配器、检查或文档。提交前运行离线测试，不要在测试中连接真实打印机。
+项目原创代码、文档和参数化示例采用 MIT 许可证；外部模型、服务、软件和用户图片遵循各自条款，见 [NOTICE](NOTICE.md)。欢迎通过 Issue 和 Pull Request 提交功能、适配器或文档改进。

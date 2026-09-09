@@ -1,162 +1,112 @@
 # Idea to Print
 
-[中文](README.md) · [MIT License](LICENSE)
+Turn a short idea, a reference image or an existing model into an editable 3D sculpture, with shape review, sizing and a complete pre-print package.
 
-## V2: bounded attempts and resumable execution
+[中文](README.md) · [Requirements](docs/requirements.md) · [MIT License](LICENSE)
 
-Pet and mythical-creature jobs use one ledger with reference, form, detail,
-geometry and slice evidence. Defaults are two generations, three local repairs
-and one reference correction. Repeated non-improvement stops a strategy; the
-best diagnostic candidate is retained without claiming quality acceptance.
+The project provides **three installable agent skills and Python tools** connecting image generation, Hunyuan3D, Blender and Bambu Studio. It supports pets, mythical creatures and other organic sculptures, including workflows starting from an existing model. An agent runs each stage and retains model versions and their reviews.
 
-V2 adds the optional official Hunyuan3D 3.1 API adapter, actual Blender import /
-regional operations / six-view final-STL rendering, and a provenance-bound
-offline Bambu slicing launcher. A possible API submission without JobId is never
-automatically repeated. Owner rejection cannot be replaced by an Agent review.
+## Features
 
-See the [V2 protocol](skills/idea-to-print/references/workflow-v2.md),
-[API configuration](skills/printable-modeling/references/hunyuan31-api.md), and
-[model configuration](skills/printable-modeling/references/model-pipeline.md).
-Preview completion, diagnostic handoff and print checks are separate outcomes.
+| Feature | Capabilities |
+|---|---|
+| Text and image input | Concept selection or direct PNG/JPEG/WebP intake, preserving original bytes and SHA256 |
+| Official image-to-3D API | Tencent Hunyuan3D 3.1 SDK adapter with a main image, named additional views and 1.5-million-face Geometry requests |
+| Staged shape review | Reference consistency, silhouette and volume, followed by fur, scales or feathers; separate visual and manufacturing results |
+| Blender processing | Preserve high-poly source; export STL, GLB, BLEND and a lightweight proxy; normalize size or retain millimetre coordinates |
+| Regional refinement | Scoped softening, tip blunting and root thickening with protected regions and displacement limits |
+| Actual mesh previews | Render the final STL from six views, add face close-ups and resume missing renders after interruption |
+| Shared job ledger | `next/status/record/reconcile/export` track stages, attempts, remote tasks and evidence; candidate, best and delivered revisions stay separate |
+| Bounded recovery | Defaults of two generations, three repairs and one reference correction; stop strategies without improvement and resume known remote jobs |
+| Bambu slicing | Fixed placement, machine/process/filament snapshots, a Windows offline CLI launcher and native-result verification |
+| Preview and delivery | Open exact extracted G-code, retain layer screenshots, and export models, slices, review history and a file manifest |
 
-An agent workflow for turning a short idea **or an uploaded image** into a
-reviewable, printable 3D sculpture and an authorized FDM print.
+Owner and agent judgments are stored separately. An agent review cannot erase an owner's rejection of the same mesh. Changed models, profiles or images invalidate affected checks. Results retain `PASS / FAIL / UNKNOWN`; exhausted attempts produce the best candidate with outstanding work.
 
-This repository contains three installable skills and reusable Python helpers.
-It is not a hosted upload application, an automatic sculpting engine, or an
-unattended printer service. An agent coordinates available image, modeling,
-filesystem and desktop tools.
+## Usage examples
 
-## V1: Design → Generate → Inspect → Refine → Validate → Slice → Manufacture
+With an agent that provides image, modeling and file tools:
 
-Image tools establish the design; a generation service supplies an initial
-high-poly mesh; Blender and the agent refine real geometry. Validators retain
-evidence and unknowns. Bambu Studio handles manufacturing settings and slicing,
-while the agent coordinates versions, authorization and verified device outcomes.
+> Use $idea-to-print to design a flowing white fox sculpture, 160 mm overall, with a stable base. Show three concepts first.
 
-The official Tencent Hunyuan3D V3.1 website has been exercised as a high-poly
-draft route using an account and available quota. The bundled
-`hunyuan_shape.py` remains a **Hunyuan3D-2.1 public demo adapter**. V2 separately
-provides an optional configured official 3.1 API client. Browser operation is supplied by the host, not
-by this helper. No same-protocol improvement percentage, current price or
-guaranteed quota is claimed here.
+With an attached image:
 
-Keep three reports separate:
+> Use $idea-to-print to make this image into a 160 mm sculpture. Preserve the pose, show six views of the actual mesh, and prepare the pre-print package.
 
-| Report | Question | Evidence boundary |
-|---|---|---|
-| Fidelity | Does this resemble the chosen design? | Compare actual exported-mesh renders with references; topology cannot approve appearance |
-| Geometry | Are applicable geometric constraints satisfied? | `PASS / FAIL / UNKNOWN` with methods, coverage, configuration and artifact hashes |
-| Slice | Will the selected process form the intended object? | Inspect actual layers, first contact, thin features, supports, removal access and full plate envelope |
+With an existing model:
 
-Unknown means unverified, not passed. Thickness/detail/connection targets depend
-on the region, nozzle and material; samples without violations do not prove a
-global minimum. Diagnostic slicing can inform repair before final readiness.
-Existing simple, already checked models can enter at the relevant stage without
-regenerating a design or repeating still-valid approvals.
+> Inspect this STL, preserve its size and shape, and prepare a white PLA slicing preview for an A1 mini. Include the model, sliced package and outstanding checks.
 
-Multiple views must show a coherent design and pose. Keep separate files with
-their views and provenance; a collage or duplicated image is not independent
-multi-view evidence. See [refinement and validation](skills/printable-modeling/references/refinement-and-validation.md).
+Jobs can end at concept, model or pre-print delivery. When physical printing is requested and the job's authorization and device conditions are established, the agent uses the official printer interface.
 
-## Start with text or an image
+## Installation
 
-> Use $idea-to-print to design a flowing fox sculpture, white, 160 mm overall,
-> with a stable base and accessible removable supports. Show concepts first.
-
-Or attach an image:
-
-> Use $idea-to-print to make this image into a 160 mm printable model. Show
-> actual front and back mesh renders before printing.
-
-An explicitly selected upload skips concept generation. Input supports static
-PNG, JPEG and WebP. A single view leaves hidden geometry to be inferred and
-checked; it is not sufficient evidence of printability.
-
-## Install
-
-Python3.11+ is required for helpers:
+Python 3.11+ is required. Install Blender and Bambu Studio separately as needed.
 
 ```bash
 git clone https://github.com/Rjxshr1/idea-to-print.git
 cd idea-to-print
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
+source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+
+# Local model processing and the official Hunyuan API
+python -m pip install -r requirements-modeling.txt -r requirements-hunyuan31.txt
+
 python install.py --destination ~/.agents/skills
 ```
 
-Use the skill directory actually recognized by your host, such as
-`~/.codex/skills` on a host configured that way. The installer refuses to
-overwrite existing skills. It installs `idea-to-print`, `printable-modeling`
-and `3d-print-workflow`; it does not install Blender/Bambu Studio, grant model
-access, or bundle the host's ImageGen or desktop-control plugins.
+Use the directory recognized by your agent, such as `~/.codex/skills`. The installer stops if a target skill already exists and records the active Python interpreter's absolute path for new installations. Merge updates to existing installations while retaining local configuration.
 
-Run the installer from the activated environment. Each installed skill gets a
-local `runtime.local.json` recording that Python's absolute path. Retain this
-environment or update the local record when moving it. Agents locate scripts
-relative to the actual installed `SKILL.md`, use the configured interpreter and
-absolute job paths when invoked outside the clone. Manual skill copies require
-configuring a Python environment with the corresponding dependencies.
+| Skill | Responsibility |
+|---|---|
+| `idea-to-print` | Text/image intake, design selection, job state and stage coordination |
+| `printable-modeling` | Image-to-3D, Blender processing, shape review and sizing |
+| `3d-print-workflow` | Geometry checks, slicing, printer configuration and print-flow coordination |
 
-## Direct image input
+Image generation and desktop control come from the agent host. The official Hunyuan API requires Tencent Cloud credentials and available quota. Blender and slicing run locally; cloud image-to-3D does not use a local inference GPU.
+
+## Command-line entry points
+
+Create an image job and inspect its next action:
 
 ```bash
 python skills/idea-to-print/scripts/prepare_image.py \
-  --image /path/to/reference.png --job jobs/my-sculpture --target-mm 160
+  --image /path/to/reference.png --job jobs/my-sculpture \
+  --target-mm 160 --brief "White sculpture with a stable base"
 
-python skills/printable-modeling/scripts/hunyuan_shape.py --describe-api
-python skills/printable-modeling/scripts/hunyuan_shape.py \
-  --job jobs/my-sculpture --input source/selected.png --attempt shape-v1
+python skills/idea-to-print/scripts/workflow_v2.py init --job jobs/my-sculpture
+python skills/idea-to-print/scripts/workflow_v2.py next --job jobs/my-sculpture
+python skills/idea-to-print/scripts/workflow_v2.py status --job jobs/my-sculpture
+
+# Check API configuration without requesting generation
+python skills/printable-modeling/scripts/hunyuan31_api.py config-check
 ```
 
-The first command is local only and preserves original bytes and SHA256.
-The last command uploads the selected image to the third-party public
-Hunyuan3D-2.1 demo and requests a draft GLB. Anonymous access worked in the
-observed route; the service can queue, sleep, change or become unavailable.
-It must not be used for a local-only request. For JPEG/WebP use the actual
-selected path recorded in `job.json`.
+After reference review, the agent submits generation, records actual results and continues the next stage. A possible submission without JobId stops automatic resubmission. Known jobs resume querying; download failures resume downloading.
 
-Generation attempts are recorded before submission. Recover a cached response
-with the same `--attempt` plus `--recover`; do not resend an uncertain attempt.
-Next inspect and adapt the real geometry in Blender, preserve editable source,
-export STL, then slice with a profile matching the actual printer. Modeling
-repairs are specific to the object, not a universal automatic repair algorithm.
+| Operation | Documentation |
+|---|---|
+| Job state, reviews, recovery and export | [Workflow](skills/idea-to-print/references/workflow-v2.md) |
+| Credentials, view slots, submission and download | [Hunyuan 3.1 API](skills/printable-modeling/references/hunyuan31-api.md) |
+| Imports, regional operations, rendering and resume | [Blender configuration](skills/printable-modeling/references/model-pipeline.md) |
+| Geometry checks, revisions and slice evidence | [Model validation](skills/printable-modeling/references/refinement-and-validation.md) |
+| Other image-to-3D routes | [Service adapters](skills/printable-modeling/references/image-to-3d.md) |
+| Optional Bambu LAN status reads | [Printer configuration](skills/3d-print-workflow/references/bambu-lan.md) |
 
-Optional local mesh dependencies: `pip install -r requirements-modeling.txt`.
-Blender is installed separately. Hosted generation needs no local inference GPU;
-local mesh memory depends on complexity. No universal RAM/VRAM minimum has been
-measured and 64GB is not a requirement. See [requirements](docs/requirements.md).
+## Deliverables
 
-The V1 `printability_gate.py` complements the lightweight `print_audit.py`
-checks with a configured geometry report. `refinement_job.py` records revisions
-and evidence; it does not sculpt, slice or approve a print. See the
-[refinement reference](skills/printable-modeling/references/refinement-and-validation.md)
-for exact commands and limitations.
+Export a selected revision with STL, editable BLEND, actual mesh renders, an available sliced package, key-layer screenshots and `manifest.json`. The manifest binds file hashes, model revision, placement, profiles and slicer version. Review history is retained separately. Reviewed previews and diagnostic handoffs with outstanding checks are labeled distinctly.
 
-## Printing and validation
+An agent compares actual meshes with references for shape review; geometry reports state their coverage. Built-in operators handle explicit regional deformations. Complex anatomy and natural fur can continue in Blender using the handoff materials. Official printer interfaces handle dispatch; included scripts prepare, inspect and read device status.
 
-Use official Bambu Studio for dispatch with current job authorization and plate
-clearance. Desktop automation must be supplied by the host; otherwise deliver the
-checked file for manual dispatch. Included printer code reads LAN telemetry or
-one camera frame only and is experimental/unofficial. See
-[printer setup](skills/3d-print-workflow/references/bambu-lan.md).
-
-Inspect first layers, thin features, support access and the full envelope,
-including brim/supports. Preserve slicer warnings and exact artifact hashes.
-Never infer good support removal from a tree-support label. Send once and verify
-new task identity, expected layers and actual device phase.
+## Development and tests
 
 ```bash
-pip install -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt -r requirements-hunyuan31.txt
 python -m pytest -q
 ```
 
-Tests use synthetic fixtures and fake service responses, with no live generation
-or printer operations. Real-world workflow evidence reaches device acceptance
-and preparation; physical finish and support removal are separate evidence.
+CI covers Linux/Windows and Python 3.11/3.12, plus the official SDK contract. Offline tests use synthetic models and simulated service responses to cover budgets, recovery, revision selection, locks and evidence integrity.
 
-MIT covers original repository content. Third-party models/services/software
-and user images retain their own terms; see [NOTICE](NOTICE.md). Model weights,
-private jobs and printer credentials are not included. Contributions should
-include reproducible, redacted evidence and passing offline tests.
+Original code, documentation and parametric examples use the MIT license. External models, services, software and user images retain their own terms; see [NOTICE](NOTICE.md). Issues and pull requests for features, adapters and documentation are welcome.

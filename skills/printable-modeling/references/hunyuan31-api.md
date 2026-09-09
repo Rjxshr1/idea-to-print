@@ -69,7 +69,7 @@ exclude signed URL parameters and credentials. A website fallback is an explicit
 alternative attempt after the current submission has been reconciled; it is not
 a retry mechanism for an ambiguous API request.
 
-Sources checked September 2026: [submit](https://cloud.tencent.com/document/product/1804/123447),
+API reference: [submit](https://cloud.tencent.com/document/product/1804/123447),
 [query](https://cloud.tencent.com/document/product/1804/123448),
 [public parameters](https://cloud.tencent.com/document/product/1804/120832),
 [official SDK](https://github.com/TencentCloud/tencentcloud-sdk-python/tree/master/tencentcloud/ai3d/v20250513).

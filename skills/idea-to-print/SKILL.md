@@ -64,7 +64,7 @@ A repair report cannot grant itself visual acceptance or printing permission.
 ## Selected image → real geometry
 
 Follow `printable-modeling` for the image-to-3D provider and local repair route.
-The official Hunyuan3D V3.1 website is an exercised high-poly draft route when
+The official Hunyuan3D 3.1 website provides an optional high-poly draft route when
 its account, quota and host browser tools are available. The bundled Hunyuan
 helper is a separate optional 2.1 public-demo adapter. The optional
 [official 3.1 API adapter](../printable-modeling/references/hunyuan31-api.md)

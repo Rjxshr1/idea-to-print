@@ -27,9 +27,9 @@ Inspect the actual image before modeling. A photograph of a sculpture, a drawing
 
 For generated organic meshes or a repair loop, read
 [refinement-and-validation.md](references/refinement-and-validation.md).
-Hunyuan3D V3.1 on the official website is an exercised source of high-poly
-drafts, not the final manufacturing validator. The bundled Python helper is
-still the 2.1 demo adapter. The separate optional
+The official Hunyuan3D 3.1 website provides an optional high-poly draft route
+when account access and quota are available. The bundled `hunyuan_shape.py`
+provides the 2.1 demo adapter. The separate optional
 [official 3.1 adapter](references/hunyuan31-api.md) supports configured API jobs
 with explicit recovery. Use [V2](../idea-to-print/references/workflow-v2.md) to
 bound attempts and [model_pipeline.py](references/model-pipeline.md) for actual

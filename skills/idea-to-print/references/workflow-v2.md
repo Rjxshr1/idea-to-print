@@ -95,11 +95,11 @@ For preview without re-slicing an editable CLI package, run
 and records package/member/file hashes in `preview-extraction.json`. Open the
 resulting `.gcode` in Studio's G-code viewer and bind that extraction receipt,
 the original package and actual screenshots. Keep the original package's warnings;
-the viewer does not replace the audit. On the exercised Studio version, its
+the viewer does not replace the audit. Bambu Studio 02.07.01.62's
 line-type view can display zero/negative aggregate material; use the native
 package audit and filament summary for material figures.
 
-## Useful completion, honest quality
+## Delivery states
 
 `preview_complete` describes a reviewed pre-print package. `print_ready` has the
 separate conservative geometry and review requirements. An unresolved shape or
@@ -115,14 +115,8 @@ model. Continue only within the requested model/pre-print/print scope.
 After a fresh export `next` returns terminal `complete`; any changed candidate,
 review or damaged delivered file invalidates that terminal snapshot.
 
-## Basis for the design
+## Related references
 
-- [InstantMesh](https://arxiv.org/html/2404.07191v1): generated view inconsistency
-  can impair reconstruction; more inferred views are not automatically better.
-- [Blender Multires](https://docs.blender.org/manual/en/latest/modeling/modifiers/generate/multiresolution.html):
-  separate base form from high-level detail. A dense triangle mesh does not gain
-  clean editable topology merely by adding a modifier.
-- [Meshy multiview guidance](https://www.meshy.ai/zh/tutorials/multi-view-image-to-3d):
-  keep pose/proportions/lighting consistent and avoid confusing shadows with shape.
-
-These sources support workflow choices, not guaranteed likeness or print success.
+- [InstantMesh multiview reconstruction](https://arxiv.org/html/2404.07191v1)
+- [Blender Multires sculpting](https://docs.blender.org/manual/en/latest/modeling/modifiers/generate/multiresolution.html)
+- [Meshy multiview image preparation](https://www.meshy.ai/zh/tutorials/multi-view-image-to-3d)

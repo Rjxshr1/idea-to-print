@@ -12,8 +12,8 @@ blender --background --factory-startup --disable-autoexec --python-use-system-en
   -- --source /ABS/job/source/mesh.stl --out-dir /ABS/job/model-v1 --config /ABS/job/model-config.json
 ```
 
-The exercised WSL Blender needs `--python-use-system-env` for NumPy. Check the
-chosen runtime once. Rendering uses CPU by default and does not interrupt other
+Some Blender runtimes require `--python-use-system-env` to access NumPy; verify
+the selected runtime before running. Rendering uses CPU by default and does not interrupt other
 model services. Example explicit configuration:
 
 ```json

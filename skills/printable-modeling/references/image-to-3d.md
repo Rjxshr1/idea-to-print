@@ -1,73 +1,123 @@
-# Image-to-3D routes and their limits
+# Image-to-3D routes
 
-The routes below supply initial geometry. Neither establishes final
-manufacturing constraints or fidelity to the user's chosen subject.
+Use an uploaded image or a selected concept image to create initial geometry,
+then prepare that geometry for the requested size and printing process.
 
-| Route | Actual integration | Observed evidence |
+| Route | Integration | Configuration |
 |---|---|---|
-| Official Tencent Hunyuan3D V3.1 website | Host browser interaction with a user's account and available quota | High-poly geometry generation and local model import/render were exercised on 2026-09-09 |
-| Public Tencent Hunyuan3D-2.1 demo | Bundled `hunyuan_shape.py` using Gradio | Anonymous generation returned a GLB on 2026-09-08; downstream repair and slicing were exercised separately |
-| Official Tencent 3.1 API | Optional V2 `hunyuan31_api.py` using the official SDK; see [API configuration](hunyuan31-api.md) | Offline contract and recovery tests cover the adapter; actual connectivity, quota and generated output require a real job receipt |
+| Official Tencent Hunyuan3D 3.1 API | `hunyuan31_api.py`: submit, query, download and recover recorded attempts | Official Python SDK, Tencent Cloud credentials and available quota |
+| Public Tencent Hunyuan3D 2.1 demo | `hunyuan_shape.py`: single-image geometry generation and cached-result recovery | `gradio_client` and access to the public service |
+| Official Hunyuan3D Studio website | Host browser interaction or manual operation | User login and available quota |
 
-For the official route, use the current capabilities visible at
-[Hunyuan 3D](https://3d.hunyuan.tencent.com/studio/creation/geo) through the host's
-supported browser tools or a manual handoff. Check login, mode and quota; record
-the submitted reference hashes, selected version/settings, attempt identity,
-returned model and its hash. Do not expose cookies, tokens or account details.
-If a submission is uncertain, inspect that service task before retrying.
+All three routes run model inference in the cloud. The selected images are
+uploaded to the chosen service. Local processing uses Blender and optional mesh
+libraries; see [installation requirements](../../../docs/requirements.md).
 
-The website's product features are not the bundled helper's API surface.
-Confirm current multi-view support and input limit when actually using it.
-Preserve separate coherent views and their labels; `hunyuan_shape.py` still
-submits one image. The separate 3.1 API helper validates named slots and requires
-a hash-bound consistency review for supplemental images. A service version change does not itself supply a new adapter.
-No same-protocol 3.1-versus-2.1 benchmark or improvement percentage is asserted
-here. These are observed routes, not bundled models, guaranteed free APIs or
-automatic repair engines.
+## Official 3.1 API
 
-## Bundled 2.1 helper: runtime and service
+Install `requirements-hunyuan31.txt` and configure
+`TENCENTCLOUD_SECRET_ID` and `TENCENTCLOUD_SECRET_KEY`. Temporary credentials
+also use `TENCENTCLOUD_TOKEN`. A private JSON file passed with
+`--credentials-file` is supported as an alternative. Keep credentials outside
+job artifacts and source control.
 
-- Python 3.11+ is the shared project baseline. This helper's online route requires `gradio_client`; version 2.6.1 was used in the observed run. The API-metadata probe also requires network access.
-- Public demo: `https://tencent-hunyuan3d-2-1.hf.space`; observed API: `/shape_generation`. It may queue, sleep, fail, impose quotas, require authentication later or change its schema. Check current capability rather than promising continued availability.
-- No API key was required for the observed anonymous route. The helper deliberately disables implicit Hugging Face token use. It is not a Tencent commercial API client.
-- Generation sends the selected image to that external service. Make this transfer clear; follow the user's upload/privacy constraints. A skill review or install check does not authorize a sample submission. If uploading is unsuitable, use a local/manual modeling route or discuss an available alternative.
-- Hosted generation uses the service's GPU. Local GPU memory is not consumed by Hunyuan inference on this route. CPU Blender repair and rendering are possible. Peak RAM and minimum hardware requirements were not benchmarked; mesh size, remeshing resolution and rendering settings determine local memory demand. Avoid claiming a tested workstation's RAM is a minimum.
-- Blender 5.0.1 CPU background operation was exercised. Optional mesh-editing scripts may need `trimesh`, `manifold3d`, `rtree`, `numpy`, `scipy` and Pillow; these are not imported by the included Hunyuan helper. Verify dependencies for the actual repair script. No universal automated repair script is bundled.
-- Local Hunyuan deployment is a separate integration requiring compatible CUDA/PyTorch, model weights and upstream hardware guidance. It was not exercised by this workflow; do not infer VRAM limits from hosted generation.
+Initialize the job and record its reference review through the
+[job workflow](../../idea-to-print/references/workflow-v2.md). The following
+commands run from the repository root:
 
-## Submit or recover one attempt
+```sh
+python skills/printable-modeling/scripts/hunyuan31_api.py config-check
+python skills/printable-modeling/scripts/hunyuan31_api.py submit --job jobs/example --attempt shape-01 --main source/main.png
+python skills/printable-modeling/scripts/hunyuan31_api.py query --job jobs/example --attempt shape-01
+python skills/printable-modeling/scripts/hunyuan31_api.py download --job jobs/example --attempt shape-01
+```
 
-The following examples run from the repository root. A user-uploaded reference is a valid direct input; it need not be generated by an image tool. Save the selected file inside the existing job first.
+`config-check` checks the SDK and credentials without submitting a job. Generation
+uses `Model=3.1`, `GenerateType=Geometry`, `FaceCount=1500000` and the
+`ap-guangzhou` region. The helper accepts one main image and, by default, up to
+two supplemental views. Supplemental images need a consistency review binding
+their paths and SHA256 hashes. Supported view slots and the review format are in
+the [API configuration reference](hunyuan31-api.md).
+
+The adapter records submission intent before making the request, saves the
+returned JobId, and downloads the original model with its hash. To continue a
+recorded attempt after interruption:
+
+```sh
+python skills/printable-modeling/scripts/hunyuan31_api.py recover --job jobs/example --attempt shape-01
+```
+
+Recovery queries the existing JobId and downloads a completed result. An
+uncertain submission without a JobId stays `UNKNOWN` for reconciliation rather
+than triggering another generation. Query and download retries are bounded.
+Collect completed results promptly: the provider documents a 24-hour validity
+period for JobId and result URLs.
+
+## Public 2.1 helper
+
+Use Python 3.11+ and install `requirements.txt`, which provides `gradio_client`.
+The helper connects anonymously to
+[`tencent-hunyuan3d-2-1.hf.space`](https://tencent-hunyuan3d-2-1.hf.space)
+and disables implicit Hugging Face token use. Service access, queueing and API
+schema are controlled by that public endpoint.
+
+Save the reference inside the job, then inspect the API and submit one attempt:
 
 ```sh
 python skills/printable-modeling/scripts/hunyuan_shape.py --describe-api
-python skills/printable-modeling/scripts/hunyuan_shape.py --job jobs/example --input source/selected.png --attempt shape-v1
+python skills/printable-modeling/scripts/hunyuan_shape.py --job jobs/example --input source/selected.png --attempt shape-01
 ```
 
-The first command fetches API metadata. The second uploads one selected image and runs geometry generation without textures. The helper fixes the observed public endpoint; a different provider needs an implemented and verified adapter, not a substituted URL.
+The first command fetches API metadata. The second submits one image to
+`/shape_generation` and generates geometry without textures. Defaults are 30
+steps, guidance 5, octree resolution 512, 8,000 chunks, seed 1234 and background
+removal; `--seed` selects a different seed. Expected argument names are checked
+before submission.
 
-Defaults are 30 steps, guidance 5, octree resolution 512, 8,000 chunks, seed 1234 and background removal. They reproduce an observed request and are not optimized for all shapes. The helper verifies expected API argument names before submission. A schema mismatch requires inspection, not blind retries.
+The helper writes `work/shape-request-<attempt>.json`,
+`work/shape-result-<attempt>.json`, downloaded files and
+`source/shape-<attempt>.glb` with byte count and SHA256. Each attempt ID is
+exclusive; run generation attempts for a job sequentially.
 
-Outputs include `work/shape-request-<attempt>.json`, `work/shape-result-<attempt>.json`, downloaded files, and `source/shape-<attempt>.glb` with byte count/SHA256. Exclusive request-file creation prevents submitting the same attempt ID twice. It is not a distributed lock: serialize generation for a job and inspect its record before allocating a new attempt.
-
-The parser accepts Gradio update envelopes, downloaded local path dictionaries and local path strings. If generation succeeded but result handling did not, recover the cached response without network access:
+If the service returned a result but local result handling was interrupted,
+recover the cached response without another network request:
 
 ```sh
-python skills/printable-modeling/scripts/hunyuan_shape.py --job jobs/example --attempt shape-v1 --recover
+python skills/printable-modeling/scripts/hunyuan_shape.py --job jobs/example --attempt shape-01 --recover
 ```
 
-`submission_uncertain` calls for checking recorded errors and service/download state, not submitting with a new ID. `result_needs_recovery` calls for recovery or a parser repair. Account for the prior attempt before any new generation. Preserve rejected meshes and reasons.
+`result_needs_recovery` identifies a cached result awaiting collection.
+`submission_uncertain` requires inspecting the recorded request and service state
+before starting another attempt. Retain prior models and rejection reasons in
+the job record.
 
-## Adapt the actual geometry
+## Studio website
 
-1. Import the actual returned model format and apply scene/node transforms correctly. Preserve raw geometry and editable source; do not concatenate untransformed mesh nodes.
-2. Render front, side, back and underside. Compare silhouette, negative space, anatomy, permanent supports and base with the reference. Reject invented plates, floating parts or other unwanted geometry.
-3. Set millimetre units and scale once. Repair observed defects; when needed, flatten the intended footprint or thicken vulnerable parts. Choose trim depth and simplification tolerance from the actual geometry, not fixed recipe values.
-4. Check the exported mesh's topology, intended shells, thickness and intersections. A calculated center of mass or stable static footprint does not establish printed strength or stability during a moving-bed print.
-5. Render and slice that exported revision. Judge supports in the actual layer preview, including removal access. Texture or shading cannot establish printable surface detail.
+Open [Hunyuan3D Studio](https://3d.hunyuan.tencent.com/studio/creation/geo) with
+the host's browser tools or use it manually. Select the available model, geometry
+mode and reference views, then record the reference hashes, settings, attempt ID
+and returned model hash in the job. Available inputs and quotas are shown by the
+website. Inspect an existing service task before retrying an uncertain submission.
 
+## Prepare geometry for printing
 
-Keep fidelity, geometric and post-slice results separate, with explicit unknowns
-and artifact identity. Use the
-[refinement and validation workflow](refinement-and-validation.md) for revision
-registration, configured inspection and recorded repairs.
+The [model pipeline](model-pipeline.md) preserves the original high-poly model,
+creates a lightweight proxy, applies configured regional edits and exports
+STL/GLB/BLEND. It renders the exported STL from six views and can resume an
+interrupted render from the saved revision.
+
+1. Import the returned format with its scene transforms, set the orientation and
+   normalize to the requested millimetre dimensions.
+2. Compare front, side, back and underside views with the reference. Check the
+   silhouette, anatomy, openings, permanent supports and base.
+3. Apply the needed local edits, such as softening a region, retracting a tip or
+   thickening a root. Protect nearby detail and set displacement limits.
+4. Check the exported mesh's topology, shells, thickness and intersections using
+   the [refinement and validation workflow](refinement-and-validation.md).
+5. Slice that same exported revision and inspect its layers, supports and support
+   removal access. Printable detail must be present in geometry rather than only
+   in textures or shading.
+
+Record visual fidelity, geometry checks and slice results against the exact
+revision. For a fully local image-to-3D route, deploy a compatible inference
+service separately with its required model weights and CUDA/PyTorch environment.
