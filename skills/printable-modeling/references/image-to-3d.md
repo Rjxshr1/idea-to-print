@@ -1,8 +1,30 @@
-# Image-to-3D adapter and its limits
+# Image-to-3D routes and their limits
 
-The included helper was exercised with the public Tencent Hunyuan3D-2.1 Hugging Face demo on 2026-09-08. It obtained a GLB anonymously; downstream Blender repair, mesh checks and Bambu slicing were exercised separately. This is one observed service route, not a bundled model, guaranteed free API, or automatic modeling/repair engine.
+Both routes below supply initial geometry. Neither establishes final
+manufacturing constraints or fidelity to the user's chosen subject.
 
-## Runtime and service
+| Route | Actual integration | Observed evidence |
+|---|---|---|
+| Official Tencent Hunyuan3D V3.1 website | Host browser interaction with a user's account and available quota | High-poly geometry generation and local model import/render were exercised on 2026-09-09 |
+| Public Tencent Hunyuan3D-2.1 demo | Bundled `hunyuan_shape.py` using Gradio | Anonymous generation returned a GLB on 2026-09-08; downstream repair and slicing were exercised separately |
+| Paid Tencent 3.1 API | Not implemented in this repository | Do not claim connectivity, cost, quota or automatic multi-view support |
+
+For the official route, use the current capabilities visible at
+[Hunyuan 3D](https://3d.hunyuan.tencent.com/studio/creation/geo) through the host's
+supported browser tools or a manual handoff. Check login, mode and quota; record
+the submitted reference hashes, selected version/settings, attempt identity,
+returned model and its hash. Do not expose cookies, tokens or account details.
+If a submission is uncertain, inspect that service task before retrying.
+
+The website's product features are not the bundled helper's API surface.
+Confirm current multi-view support and input limit when actually using it.
+Preserve separate coherent views and their labels; the existing helper still
+submits one image. A service version change does not itself supply a new adapter.
+No same-protocol 3.1-versus-2.1 benchmark or improvement percentage is asserted
+here. These are observed routes, not bundled models, guaranteed free APIs or
+automatic repair engines.
+
+## Bundled 2.1 helper: runtime and service
 
 - Python 3.11+ is the shared project baseline. This helper's online route requires `gradio_client`; version 2.6.1 was used in the observed run. The API-metadata probe also requires network access.
 - Public demo: `https://tencent-hunyuan3d-2-1.hf.space`; observed API: `/shape_generation`. It may queue, sleep, fail, impose quotas, require authentication later or change its schema. Check current capability rather than promising continued availability.
@@ -37,8 +59,14 @@ python skills/printable-modeling/scripts/hunyuan_shape.py --job jobs/example --a
 
 ## Adapt the actual geometry
 
-1. Import GLB and apply scene/node transforms correctly. Preserve raw geometry and editable source; do not concatenate untransformed mesh nodes.
+1. Import the actual returned model format and apply scene/node transforms correctly. Preserve raw geometry and editable source; do not concatenate untransformed mesh nodes.
 2. Render front, side, back and underside. Compare silhouette, negative space, anatomy, permanent supports and base with the reference. Reject invented plates, floating parts or other unwanted geometry.
-3. Set millimetre units and scale once. Repair observed defects, flatten the intended footprint and thicken vulnerable parts. Choose trim depth and simplification tolerance from the actual geometry, not fixed recipe values.
+3. Set millimetre units and scale once. Repair observed defects; when needed, flatten the intended footprint or thicken vulnerable parts. Choose trim depth and simplification tolerance from the actual geometry, not fixed recipe values.
 4. Check the exported mesh's topology, intended shells, thickness and intersections. A calculated center of mass or stable static footprint does not establish printed strength or stability during a moving-bed print.
 5. Render and slice that exported revision. Judge supports in the actual layer preview, including removal access. Texture or shading cannot establish printable surface detail.
+
+
+Keep fidelity, geometric and post-slice results separate, with explicit unknowns
+and artifact identity. Use the
+[refinement and validation workflow](refinement-and-validation.md) for revision
+registration, configured inspection and recorded repairs.

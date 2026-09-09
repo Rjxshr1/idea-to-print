@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "example-fdm-sculpture-0.4mm-geometry-gate",
+  "description": "Illustrative thresholds, not a universal printing guarantee. Replace with the real device, process and part-specific requirements.",
+  "units": "mm",
+  "scope": "Geometry gate only. Full sculpture acceptance separately requires appearance and post-slice review. Unimplemented geometry coverage stays UNKNOWN.",
+  "process": {"nozzle_mm": 0.4, "layer_height_mm": 0.12, "material": "PLA"},
+  "build_volume_mm": [180, 180, 180],
+  "reserve_total_mm": [10, 10, 5],
+  "max_components": 1,
+  "degenerate_area_mm2": 1e-12,
+  "rules": {"wall_min_mm": 1.2, "detail_min_mm": 0.8, "connection_min_mm": 1.5},
+  "regions": [],
+  "thickness_sampling": {"enabled": false, "max_samples": 128, "max_candidates": 32},
+  "required_checks": [
+    "input_integrity", "watertight", "edge_manifold", "vertex_manifold", "winding",
+    "degenerate_faces", "duplicate_faces", "components", "outward_normals", "build_volume",
+    "self_intersection", "minimum_wall", "minimum_detail", "minimum_connection",
+    "base_contact", "stability"
+  ]
+}

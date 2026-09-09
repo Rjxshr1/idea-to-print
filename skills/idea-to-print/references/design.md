@@ -24,3 +24,25 @@ require fragile structural sections.
 Render actual returned images through working host media or absolute local paths.
 Keep a candidate ID, image hash and caption per version. Editing an accepted
 image creates a new version. Do not silently switch to a different candidate.
+
+
+## Coherent multi-view references
+
+For a complex object whose hidden structure matters, derive additional views
+from the selected design rather than generating unrelated candidates. Front,
+left, right, back and three-quarter views are useful when they resolve an actual
+ambiguity; do not force a fixed view count on simple shapes or adequate uploads.
+
+Before reconstruction, compare silhouette, pose, number/placement of limbs,
+horns, wings, major markings and permanent supports across views. Keep each
+view in a separate file with its label, source and hash. Correct inconsistent
+views or omit the contradictory input with the assumption recorded. More
+inconsistent images are not better constraints.
+
+A multi-view collage is a presentation, not automatically a valid multi-view
+API input. Extract actual individual views only when the service accepts those
+files, then inspect each; extraction does not establish geometric consistency.
+Never copy the same image to claim additional views. AI turnarounds are design
+inferences, not a calibrated scan of a physical object. Verify the provider's
+current view limit and available interface rather than assuming a product claim
+is supported by the local adapter.

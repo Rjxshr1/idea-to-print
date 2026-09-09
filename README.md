@@ -11,11 +11,32 @@ flowchart LR
   A[一句话描述] --> B[生成候选图并选择]
   C[上传 PNG / JPEG / WebP] --> D[选定参考图]
   B --> D
-  D --> E[图生3D初稿]
-  E --> F[真实模型检查与打印适配]
-  F --> G[切片和支撑检查]
-  G --> H[已授权的打印与状态核验]
+  D --> E[Generate：图生3D初始高模]
+  E --> F[Inspect：外观与几何检查]
+  F --> G[Refine：Blender修形和制造适配]
+  G --> H[Validate：带证据的检查结果]
+  H -->|需修复| G
+  H --> I[Slice：切片与拆撑检查]
+  I --> J[Manufacture：已授权的发送与核验]
 ```
+
+## V1：设计、修形和制造分开验收
+
+图像工具负责设计；Hunyuan负责初始高模；Blender与Agent负责实际修形；检查工具记录证据与未验项；Bambu Studio负责制造参数与切片；Agent衔接版本、授权和设备结果。
+
+已实测的高模路线包括**腾讯官方网页Hunyuan3D V3.1**，需要自己的账号和可用额度。仓库自带的`hunyuan_shape.py` **仍是Hunyuan3D-2.1公共演示适配器**；没有实现计费的3.1 API客户端。网页操作能力来自Agent宿主，不能通过改服务地址把2.1脚本变成3.1 API。这里不声明3.1相对2.1的同口径提升百分比、当前价格或保证额度。
+
+V1把验收拆为三类：
+
+| 报告 | 解决的问题 | 必须保留的边界 |
+|---|---|---|
+| Fidelity（外观） | 是否像参考、姿态和细节是否正确 | 实际模型渲染与参考对比；几何闭合不能代替外观认可 |
+| Geometry（几何） | 拓扑、连接、尺寸及适用的制造约束 | `PASS / FAIL / UNKNOWN`，未测到的问题不能算已通过 |
+| Slice（切片） | 首层、细节成线、支撑、拆除路径和完整占板范围 | 需要实际切片和预览；树状支撑的名称不代表好拆 |
+
+工具报告绑定具体模型和配置的SHA256。Agent修复后重新验收；不以“已修好”的文字替代结果。壁厚、细节、连接阈值按部位、喷嘴和材料配置，抽样厚度无异常不证明整个模型都合格。模型尚有未知项时可以继续修形或诊断切片，最终交付和发送必须明确实际检查范围与尚未解决的限制。
+
+多视图可约束背面与侧面，但需要先审查同一姿态、四肢、角、花纹的一致性。保留各独立视图、角度和来源；拼图或同一图片复制多份不算多视图。已选择的设计不会因这一流程被自动重画，简单已有模型也不必重新跑一遍生成链。详见[修形与验收](skills/printable-modeling/references/refinement-and-validation.md)。
 
 ## 两种用法
 
@@ -102,7 +123,7 @@ python skills/3d-print-workflow/scripts/print_audit.py fit \
 python skills/3d-print-workflow/scripts/print_audit.py slice jobs/my-sculpture/outputs/ready.gcode.3mf
 ```
 
-网格检查不覆盖所有自交、壁厚或稳定性问题；缩放计算也不代替实际切片范围检查。具体边界见各脚本输出和技能说明。
+`print_audit.py`保留轻量拓扑、尺寸和切片包检查。V1另提供`printability_gate.py`输出带配置、范围和未知项的几何报告；`refinement_job.py`记录修订、修复说明与证据哈希。详见[检查命令与解释](skills/printable-modeling/references/refinement-and-validation.md)。这些工具不会自动雕刻模型，也不覆盖全部自交、壁厚或稳定性问题。缩放计算不代替实际切片范围检查。
 
 ## 打印机连接
 

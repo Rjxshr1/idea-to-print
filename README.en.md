@@ -10,6 +10,38 @@ It is not a hosted upload application, an automatic sculpting engine, or an
 unattended printer service. An agent coordinates available image, modeling,
 filesystem and desktop tools.
 
+## V1: Design → Generate → Inspect → Refine → Validate → Slice → Manufacture
+
+Image tools establish the design; a generation service supplies an initial
+high-poly mesh; Blender and the agent refine real geometry. Validators retain
+evidence and unknowns. Bambu Studio handles manufacturing settings and slicing,
+while the agent coordinates versions, authorization and verified device outcomes.
+
+The official Tencent Hunyuan3D V3.1 website has been exercised as a high-poly
+draft route using an account and available quota. The bundled
+`hunyuan_shape.py` remains a **Hunyuan3D-2.1 public demo adapter**. A paid 3.1
+API client is not implemented. Browser operation is supplied by the host, not
+by this helper. No same-protocol improvement percentage, current price or
+guaranteed quota is claimed here.
+
+Keep three reports separate:
+
+| Report | Question | Evidence boundary |
+|---|---|---|
+| Fidelity | Does this resemble the chosen design? | Compare actual exported-mesh renders with references; topology cannot approve appearance |
+| Geometry | Are applicable geometric constraints satisfied? | `PASS / FAIL / UNKNOWN` with methods, coverage, configuration and artifact hashes |
+| Slice | Will the selected process form the intended object? | Inspect actual layers, first contact, thin features, supports, removal access and full plate envelope |
+
+Unknown means unverified, not passed. Thickness/detail/connection targets depend
+on the region, nozzle and material; samples without violations do not prove a
+global minimum. Diagnostic slicing can inform repair before final readiness.
+Existing simple, already checked models can enter at the relevant stage without
+regenerating a design or repeating still-valid approvals.
+
+Multiple views must show a coherent design and pose. Keep separate files with
+their views and provenance; a collage or duplicated image is not independent
+multi-view evidence. See [refinement and validation](skills/printable-modeling/references/refinement-and-validation.md).
+
 ## Start with text or an image
 
 > Use $idea-to-print to design a flowing fox sculpture, white, 160 mm overall,
@@ -77,7 +109,13 @@ repairs are specific to the object, not a universal automatic repair algorithm.
 Optional local mesh dependencies: `pip install -r requirements-modeling.txt`.
 Blender is installed separately. Hosted generation needs no local inference GPU;
 local mesh memory depends on complexity. No universal RAM/VRAM minimum has been
-measured and64GB is not a requirement. See [requirements](docs/requirements.md).
+measured and 64GB is not a requirement. See [requirements](docs/requirements.md).
+
+The V1 `printability_gate.py` complements the lightweight `print_audit.py`
+checks with a configured geometry report. `refinement_job.py` records revisions
+and evidence; it does not sculpt, slice or approve a print. See the
+[refinement reference](skills/printable-modeling/references/refinement-and-validation.md)
+for exact commands and limitations.
 
 ## Printing and validation
 

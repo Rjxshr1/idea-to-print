@@ -30,6 +30,29 @@ The mesh checker reports STL topology and bounds assuming millimetres; STL carri
 
 Proportional fit uses currently imported dimensions and fixed orientation. `--clearance` is total reserve per axis, not per side. The example volume is illustrative: use the actual printer. Brim, support, purge areas and plate exclusions still require slicer checks. Slicer percentages may refer to the underlying mesh; report before/after dimensions and their ratio.
 
+## Keep scoped validation explicit
+
+For generated or substantially repaired meshes, use the configurable
+`scripts/printability_gate.py` and the companion
+[refinement reference](../printable-modeling/references/refinement-and-validation.md).
+Retain separate geometry, fidelity and slice reports. A tool's topology result
+cannot establish resemblance, support removal or unmeasured minimum thickness.
+Missing coverage is `UNKNOWN`, not `PASS`. Read each check's method and coverage;
+an overall status never expands them.
+
+Configure relevant constraints from the actual part, nozzle, material and use.
+Do not make speculative checks or one sculpture's dimensions universal
+requirements for every existing model. Reuse current evidence for the exact
+mesh/profile; changes invalidate the checks they affect. Required unresolved
+manufacturing defects block readiness. Non-blocking limitations remain visible
+in the handoff; honor applicable user choices rather than inventing repeated
+approval for already accepted scope.
+
+Continue diagnosis, repair and diagnostic slicing where useful. The final
+ready state requires the applicable geometry/fidelity/slice evidence and an
+explicit account of remaining limitations. Neither a geometry `PASS` nor
+a completed slice alone authorizes Send.
+
 ## Slice and assess support removal
 
 Match the real printer, nozzle, plate and material. Start with a suitable manufacturer/author profile and change parameters required for the model. Reslice after geometry or size changes.
@@ -60,6 +83,6 @@ If scheduling is requested, use an actual supported scheduler and record date/ti
 
 Keep a compact job manifest containing source/selection, file paths and hashes, material/size, mesh/slice evidence, authorization/plate confirmation, dispatch intent/result, device task identity and feedback. Preserve unknown existing fields. The entry skill's manifest may be reused; these specialist helpers do not automatically integrate every stage into it.
 
-Evidence-based stages are `selected → modeled/imported → sliced → ready → dispatch_intent → prepare/running → completed/failed`. Record pending and unknown results explicitly. Matching task completion and full layers establish device completion, not surface quality or easy support removal. Record physical feedback before treating a choice as a reusable preset.
+Evidence-based stages include `selected → modeled/imported → inspected → refined → validated → sliced → ready → dispatch_intent → prepare/running → completed/failed`. Skip stages already satisfied by current evidence; do not rerun generation for a resize. Record pending and unknown results explicitly, and qualify validation by its measured scope. Matching task completion and full layers establish device completion, not surface quality or easy support removal. Record physical feedback before treating a choice as a reusable preset.
 
 Deliver source, actual preview and final package when sliced, dimensions/time/weight and specific outstanding issues. See [acceptance.md](references/acceptance.md) for evidence levels and offline regression cases.

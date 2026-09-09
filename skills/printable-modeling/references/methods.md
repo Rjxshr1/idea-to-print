@@ -35,3 +35,22 @@ An image leaves unseen surfaces undetermined. Identify the features that must ma
 ## Feedback
 
 Record appearance, functional dimensions when relevant, defects, broken features, support-removal effort and difficult areas. Change the affected modeling/orientation/support choice. Device completion alone does not validate a reusable support-removal preset.
+
+
+## Surface detail and local constraints
+
+Match the kind of detail, not just its amount. Animal fur may need connected,
+rounded clumps and variable flow; scales may need distinct overlapping ridges;
+feathers need a supported root and defined edges. A single repeated thin-plate
+pattern can have high face count while failing the selected appearance. Check
+the neutral-material exported mesh at the intended size and from the actual
+display views; texture and polygon count do not establish printable relief.
+
+Measure or explicitly leave unknown the vulnerable regions after scaling.
+Keep wall thickness, attached relief and load-bearing connections as distinct
+rules, scoped by part and process. A normal-ray sample can detect a thin risk
+but cannot certify a global minimum. Geometric contact, a calculated center
+of mass and a finished object standing still also do not certify adhesion or
+strength throughout a moving-bed print. See
+[refinement-and-validation.md](refinement-and-validation.md) for configured
+reports and revision-bound evidence.

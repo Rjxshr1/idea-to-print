@@ -1,6 +1,6 @@
 ---
 name: idea-to-print
-description: Turn an idea or uploaded image into a printable 3D sculpture and an authorized FDM print. Supports concept selection, direct image-to-model input, mesh review, slicing and resumable printing handoff.
+description: Turn an idea or uploaded image into a reviewable 3D sculpture and an authorized FDM print. Coordinate design selection, mesh refinement, evidence-based validation, slicing and resumable printing handoff.
 ---
 
 # Idea or image → printable object
@@ -41,18 +41,34 @@ source/raw mesh/editable/final/sliced artifacts, checks, authorization and
 dispatch evidence in `job.json`. See [job continuity](references/job-record.md).
 Keep job images and device credentials out of public repositories.
 
+## Track a refinement job
+
+Use `Design → Generate → Inspect → Refine → Validate → Slice → Manufacture`
+as stage names, not a demand to rerun completed work. An existing validated model
+can enter at sizing/slicing. Keep separate fidelity, geometry and slice results;
+each result is `PASS`, `FAIL` or `UNKNOWN` for a stated scope and revision.
+Read [refinement and validation](../printable-modeling/references/refinement-and-validation.md)
+for generated organic meshes or a repair/validator workflow.
+
+Use `scripts/refinement_job.py` to record revisions and evidence hashes when
+maintaining this workflow. It is bookkeeping, not a sculptor, validator or printer
+approval. Preserve actual user choices and existing applicable authorization.
+A repair report cannot grant itself visual acceptance or printing permission.
+
 ## Selected image → real geometry
 
 Follow `printable-modeling` for the image-to-3D provider and local repair route.
-The bundled Hunyuan helper is optional: it submits the chosen local image to a
-third-party public demo. Explain that transfer for a new user of this route and
+The official Hunyuan3D V3.1 website is an exercised high-poly draft route when
+its account, quota and host browser tools are available. The bundled Hunyuan
+helper is a separate optional 2.1 public-demo adapter; a paid 3.1 API integration
+is not implemented. It submits the chosen local image to that demo. Explain that transfer for a new user of this route and
 honor local-only or privacy constraints. A local-only request cannot be fulfilled
 by silently using this hosted adapter. Service/account constraints are checked
 when used; access is not granted by installing a skill.
 
 Preserve the reference. Use image-editing tools for optional background cleanup
 without changing the intended object, retaining a separate result. Inspect the
-raw GLB from front/side/back/underside. Unseen surfaces are inferred: catch
+raw mesh from front/side/back/underside. Unseen surfaces are inferred: catch
 unexpected slabs, missing limbs, fused negative space and disconnected details.
 Save editable source, repair the actual geometry, then render the final exported
 model for review. Major changes to pose, silhouette or assembly need a design
@@ -91,7 +107,8 @@ Resume the same job and first incomplete stage. Recover cached model results
 before requesting another generation; reconcile any outstanding print attempt
 before sending. Do not schedule or monitor unless asked using a supported mechanism.
 
-Keep concept quality, checked geometry, sliced readiness, device completion and
-physical acceptance separate. Feedback on resemblance, stability, broken details,
+Keep concept/fidelity quality, scoped geometry results, sliced readiness, device
+completion and physical acceptance separate. Unsupported or unrun checks remain
+`UNKNOWN`; a report without observed faults is not evidence of full printability. Feedback on resemblance, stability, broken details,
 support removal and contact marks determines future improvements. Never upgrade
 device FINISH into a claim of an inspected good-quality object.

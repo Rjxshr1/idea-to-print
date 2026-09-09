@@ -20,7 +20,7 @@ python skills/idea-to-print/scripts/prepare_image.py \
 `source/selected.<extension>`, and records actual format, dimensions, orientation
 and SHA256 in `job.json`. No network call occurs. It refuses existing jobs;
 resume their manifests instead of re-importing over an established selection.
-Its local resource limits are64MiB and40megapixels, not provider limits.
+Its local resource limits are 64MiB and 40 megapixels, not provider limits.
 
 The helper does not infer model/print permission from free text: the agent records
 the user's actual authorization in the manifest. Intake alone never authorizes
@@ -37,3 +37,11 @@ optional cleanup. A single view leaves the back and underside unspecified.
 After intake, follow `printable-modeling`. Hosted generation uploads the selected
 file to the named service. A request to import or inspect an image does not itself
 call that service. If the user requires local-only handling, do not use it.
+
+
+For coherent multi-view input, retain each original separately and record view
+labels/provenance. Review cross-view pose and anatomy before upload; a cropped
+tile is not evidence that different views agree. The intake helper records one
+selected image and does not submit a multi-view job by itself. See
+[design.md](design.md#coherent-multi-view-references) and the provider's actual
+interface. Keep the user's uploaded design selected when preparing extra views.
