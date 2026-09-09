@@ -165,3 +165,15 @@ def test_real_geometry_check_binds_profile_and_preserves_unknown(ledger, job):
     assert ledger.main(['check', '--job', str(job), '--id', 'v1', '--profile', str(profile)]) == 0
     assert review(ledger, job) == 0
     assert ledger.status(read(job), 'v1')['overall'] == 'FAIL'
+
+
+def test_owner_rejection_survives_agent_review_and_same_mesh_revision_alias(ledger, job):
+    register(ledger, job)
+    assert ledger.main(['review', '--job', str(job), '--id', 'v1', '--kind', 'appearance',
+                        '--status', 'FAIL', '--reviewer', 'owner', '--note', 'Owner: this face is not right',
+                        '--evidence', str(job / 'preview.png')]) == 0
+    assert review(ledger, job, status='PASS') == 0
+    assert ledger.status(read(job), 'v1')['stages']['appearance']['status'] == 'FAIL'
+    assert read(job)['refinement']['revisions']['v1']['owner_reviews'][0]['status'] == 'FAIL'
+    assert register(ledger, job, 'renamed-v1', 'v1') == 0
+    assert ledger.status(read(job), 'renamed-v1')['stages']['appearance']['status'] == 'FAIL'

@@ -5,6 +5,12 @@ description: Turn an idea or uploaded image into a reviewable 3D sculpture and a
 
 # Idea or image → printable object
 
+For iterative pet and mythical-creature jobs, use the
+[V2 bounded workflow](references/workflow-v2.md): one resumable ledger,
+reference → form → detail checks, limited attempts, and an explicit diagnostic
+handoff when quality does not converge. Existing models enter at import;
+simple edits need only their relevant stage.
+
 Coordinate the bundled sibling skills `printable-modeling` and
 `3d-print-workflow`; read their instructions when reaching that stage. Inspect
 available image, filesystem, rendering and desktop-control tools before using
@@ -60,8 +66,10 @@ A repair report cannot grant itself visual acceptance or printing permission.
 Follow `printable-modeling` for the image-to-3D provider and local repair route.
 The official Hunyuan3D V3.1 website is an exercised high-poly draft route when
 its account, quota and host browser tools are available. The bundled Hunyuan
-helper is a separate optional 2.1 public-demo adapter; a paid 3.1 API integration
-is not implemented. It submits the chosen local image to that demo. Explain that transfer for a new user of this route and
+helper is a separate optional 2.1 public-demo adapter. The optional
+[official 3.1 API adapter](../printable-modeling/references/hunyuan31-api.md)
+has explicit configuration, bounded attempts and recovery. The 2.1 helper
+submits the chosen local image to its demo. Explain that transfer for a new user of this route and
 honor local-only or privacy constraints. A local-only request cannot be fulfilled
 by silently using this hosted adapter. Service/account constraints are checked
 when used; access is not granted by installing a skill.

@@ -35,8 +35,9 @@ views. Resolve contradictory inputs before submission.
 The official Tencent Hunyuan3D V3.1 website has been exercised for high-poly
 drafts. Check its currently available mode and account quota when using it.
 The repository's `hunyuan_shape.py` is the separate 2.1 public demo adapter,
-which submits one image. No paid 3.1 API adapter or multi-view API submission is
-implemented here. See [image-to-3D.md](image-to-3d.md) for the actual routes.
+which submits one image. The optional [official 3.1 adapter](hunyuan31-api.md)
+is a separate configured route. See [image-to-3D.md](image-to-3d.md) for the demo
+and [V2](../../idea-to-print/references/workflow-v2.md) for bounded execution.
 
 ## Inspect → refine → recheck
 

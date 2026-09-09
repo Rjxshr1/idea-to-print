@@ -17,6 +17,14 @@ Use a separate directory in the user's workspace for each job. Preserve existing
 
 ## Prepare and size
 
+For V2 jobs, `scripts/slice_pipeline.py prepare` snapshots the exact mesh,
+positioned 3MF, machine/process/filament profiles and launch arguments.
+`scripts/run_bambu_slice.py` is the bounded Windows host launcher for the
+installed offline Bambu CLI. `slice_pipeline.py collect` verifies its actual
+completion and records provenance. These helpers never send a print. Bind the
+receipt and actual Studio screenshots through the
+[V2 workflow](../idea-to-print/references/workflow-v2.md).
+
 Record purpose, style, dimensions/units and finish requirements. Ask only for missing facts that materially change the result. Show actual rendered mesh previews and preserve editable source with STL/3MF; include STEP only when produced by a CAD engine.
 
 Commands below run from the repository root:

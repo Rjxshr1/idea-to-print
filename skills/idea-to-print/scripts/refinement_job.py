@@ -18,6 +18,7 @@ import re
 import subprocess
 import sys
 import uuid
+import socket
 
 STATUSES = {'PASS', 'FAIL', 'UNKNOWN'}
 # The sculpture workflow has a fixed acceptance floor. A diagnostic profile
@@ -106,11 +107,43 @@ def transaction(directory):
     directory = Path(directory).expanduser().resolve(strict=True)
     jobpath = directory / 'job.json'
     lockpath = directory / '.refinement.lock'
-    # A concurrent invocation must inspect/retry later; never remove its lock.
-    with lockpath.open('x', encoding='utf-8') as lock:
-        lock.write(json.dumps({'pid': os.getpid(), 'at': utc()}))
+    # The kernel lock survives metadata races and is released on process death.
+    # Keep the guard inode permanent: unlinking it would let two writers lock
+    # different inodes. The human-readable ownership file is separate.
+    guard = (directory / '.refinement.guard').open('a+b')
     try:
+        if os.name == 'nt':
+            import msvcrt
+            guard.seek(0)
+            if not guard.read(1):
+                guard.write(b'0'); guard.flush()
+            guard.seek(0)
+            msvcrt.locking(guard.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(guard.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        guard.close()
+        raise ValueError('Another live process owns this job transaction')
+    owner = process_owner()
+    recovered = None
+    owns_metadata = False
+    try:
+        if lockpath.exists():
+            try:
+                previous = json.loads(lockpath.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                raise ValueError('Unrecognized lock owner; reconcile manually without deleting an active lock')
+            if owner_alive(previous) is not False:
+                raise ValueError('Recorded job owner is alive or cannot be verified')
+            recovered = previous
+            lockpath.unlink()
+        with lockpath.open('x', encoding='utf-8') as lock:
+            lock.write(json.dumps(owner))
+        owns_metadata = True
         job = json.loads(jobpath.read_text(encoding='utf-8'))
+        if recovered is not None:
+            job.setdefault('lock_recoveries', []).append({'at': utc(), 'previous_owner': recovered})
         yield directory, job
         temp = directory / ('.refinement-' + uuid.uuid4().hex + '.tmp')
         try:
@@ -120,7 +153,109 @@ def transaction(directory):
             if temp.exists():
                 temp.unlink()
     finally:
-        lockpath.unlink()
+        if owns_metadata:
+            lockpath.unlink(missing_ok=True)
+        guard.close()
+
+
+def process_owner():
+    owner = {'pid': os.getpid(), 'host': socket.gethostname(), 'at': utc()}
+    if sys.platform.startswith('linux'):
+        owner['boot_id'] = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        owner['process_start'] = Path(f'/proc/{os.getpid()}/stat').read_text().rsplit(')', 1)[1].split()[19]
+    elif os.name == 'nt':
+        _, start = windows_process_identity(os.getpid())
+        if start is not None:
+            owner['process_start'] = start
+    return owner
+
+
+def windows_process_identity(pid):
+    """Read-only process identity. Never use os.kill(pid, 0) on Windows."""
+    import ctypes
+    from ctypes import wintypes
+    api = ctypes.WinDLL('kernel32', use_last_error=True)
+    api.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    api.OpenProcess.restype = wintypes.HANDLE
+    api.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    api.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    api.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = api.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return (False, None) if ctypes.get_last_error() == 87 else (None, None)
+    try:
+        code = wintypes.DWORD()
+        if not api.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return None, None
+        if code.value != 259:  # STILL_ACTIVE
+            return False, None
+        times = [wintypes.FILETIME() for _ in range(4)]
+        if not api.GetProcessTimes(handle, *(ctypes.byref(t) for t in times)):
+            return True, None
+        start = str((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime)
+        return True, start
+    finally:
+        api.CloseHandle(handle)
+
+
+def owner_alive(owner):
+    """True=live, False=proven dead, None=unverifiable. Never guess remote ownership."""
+    if not isinstance(owner, dict) or owner.get('host') != socket.gethostname():
+        return None
+    pid = owner.get('pid')
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    if os.name == 'nt':
+        alive, start = windows_process_identity(pid)
+        if alive and start is not None and owner.get('process_start') not in (None, start):
+            return False
+        return alive
+    if sys.platform.startswith('linux'):
+        boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        if owner.get('boot_id') and owner['boot_id'] != boot:
+            return False
+        try:
+            fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+            if fields[0] == 'Z':
+                return False
+            if owner.get('process_start') and owner['process_start'] != fields[19]:
+                return False
+            return True
+        except FileNotFoundError:
+            return False
+        except (OSError, IndexError):
+            return None
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return None
+
+
+def appearance_status(revision, job=None):
+    """An owner rejection of these exact mesh bytes persists across later reviews."""
+    records = list(revision.get('owner_reviews', []))
+    records += [r for r in revision.get('history', []) if r.get('kind') in ('review', 'appearance')]
+    latest = revision.get('reviews', {}).get('appearance')
+    if latest:
+        records.append(latest)
+    if job:
+        for other in job.get('refinement', {}).get('revisions', {}).values():
+            if other is revision:
+                continue
+            records.extend(other.get('owner_reviews', []))
+            records.extend(r for r in other.get('history', []) if r.get('kind') in ('review', 'appearance'))
+            latest_other = other.get('reviews', {}).get('appearance')
+            if latest_other:
+                records.append(latest_other)
+        records.extend(job.get('workflow_v2', {}).get('owner_reviews', []))
+    mesh_hash = revision['artifacts']['mesh']['sha256']
+    if any(r.get('reviewer') == 'owner' and r.get('status') == 'FAIL'
+           and r.get('mesh_sha256') == mesh_hash for r in records):
+        return {'status': 'FAIL', 'reason': 'Owner rejected this exact mesh; retained independently of agent reviews'}
+    return check_status(latest, revision, review=True)
 
 
 def get_revision(job, name):
@@ -179,7 +314,7 @@ def status(job, name):
     changed = stale(revision['artifacts'].values())
     stages = {
         'geometry': check_status(revision.get('geometry'), revision, geometry=True),
-        'appearance': check_status(revision.get('reviews', {}).get('appearance'), revision, review=True),
+        'appearance': appearance_status(revision, job),
         'slice_package': check_status(revision.get('slice'), revision),
         'slice_review': check_status(revision.get('reviews', {}).get('slice'), revision, review=True),
     }
@@ -300,12 +435,14 @@ def execute(args):
                 'reviewer': args.reviewer, 'note': args.note,
                 'evidence': [artifact(p) for p in args.evidence], 'checks': checks,
                 'scope': 'Attributed judgment from actual evidence; not an automated geometry proof.'}
+            if args.kind == 'appearance' and args.reviewer == 'owner':
+                revision.setdefault('owner_reviews', []).append(record.copy())
             if args.kind == 'slice':
                 if not revision.get('slice'):
                     raise ValueError('Record and audit a ready package before reviewing its toolpaths')
                 if set(checks) != SLICE_CHECKS or aggregate(checks.values()) != args.status:
                     raise ValueError('Slice review requires all six checks; status must equal their aggregate: ' + ', '.join(sorted(SLICE_CHECKS)))
-                if check_status(revision['slice'], revision)['status'] == 'UNKNOWN':
+                if check_status(revision['slice'], revision).get('reason', '').startswith('STALE'):
                     raise ValueError('Slice audit is missing or stale; repeat it first')
                 record['package_sha256'] = revision['slice']['package']['sha256']
             elif checks and aggregate(checks.values()) != args.status:

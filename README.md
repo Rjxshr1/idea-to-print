@@ -4,6 +4,22 @@
 
 [English](README.en.md) · [MIT License](LICENSE) · [安装与资源要求](docs/requirements.md)
 
+## V2：有限尝试与可靠恢复
+
+宠物与神兽作业可用统一执行账本，按参考、形体、细节、几何和切片分阶段验证。
+默认最多2次生成、3次局部修复、1次参考纠正；连续同类策略无改善会停止，交付最佳候选和未过项。
+当前尝试、最佳候选与已交付版本分开，用户否决不会被Agent评价覆盖。
+
+- `workflow_v2.py` 提供 `init/next/status/record/reconcile/export`，由当前Agent执行唯一下一动作。
+- 可选 `hunyuan31_api.py` 接腾讯官方3.1 API；无JobId的不确定提交不会自动重投，需配置自己的凭据和可用额度。
+- `model_pipeline.py` 做真实高模导入、毫米归一或坐标保留、有限区域操作、导出和最终STL六视图渲染。
+- `slice_pipeline.py` 与Windows `run_bambu_slice.py` 绑定输入、配置、实际切片完成和包校验，不发送打印。
+
+详见[完整V2用法](skills/idea-to-print/references/workflow-v2.md)、
+[官方API配置](skills/printable-modeling/references/hunyuan31-api.md)、
+[建模配置](skills/printable-modeling/references/model-pipeline.md)。
+预览完成、诊断交付与打印检查分别报告；流程跑通不代表造型或实体效果通过。
+
 这是可安装的 **3个Agent skills和配套Python工具**。由具备文件、图像和桌面工具的Agent执行流程；仓库不提供网页上传站点、通用自动雕刻引擎或无人值守打印服务。
 
 ```mermaid
@@ -15,7 +31,8 @@ flowchart LR
   E --> F[Inspect：外观与几何检查]
   F --> G[Refine：Blender修形和制造适配]
   G --> H[Validate：带证据的检查结果]
-  H -->|需修复| G
+  H -->|预算内且策略有效| G
+  H -->|无改善或能力不足| K[保留最佳候选与诊断交接]
   H --> I[Slice：切片与拆撑检查]
   I --> J[Manufacture：已授权的发送与核验]
 ```
@@ -24,7 +41,7 @@ flowchart LR
 
 图像工具负责设计；Hunyuan负责初始高模；Blender与Agent负责实际修形；检查工具记录证据与未验项；Bambu Studio负责制造参数与切片；Agent衔接版本、授权和设备结果。
 
-已实测的高模路线包括**腾讯官方网页Hunyuan3D V3.1**，需要自己的账号和可用额度。仓库自带的`hunyuan_shape.py` **仍是Hunyuan3D-2.1公共演示适配器**；没有实现计费的3.1 API客户端。网页操作能力来自Agent宿主，不能通过改服务地址把2.1脚本变成3.1 API。这里不声明3.1相对2.1的同口径提升百分比、当前价格或保证额度。
+已实测的高模路线包括**腾讯官方网页Hunyuan3D V3.1**，需要自己的账号和可用额度。`hunyuan_shape.py` **仍是Hunyuan3D-2.1公共演示适配器**；V2另有可选官方3.1 API客户端，配置与实测状态独立。网页操作能力来自Agent宿主，不能通过改服务地址把2.1脚本变成3.1 API。这里不声明3.1相对2.1的同口径提升百分比、当前价格或保证额度。
 
 V1把验收拆为三类：
 

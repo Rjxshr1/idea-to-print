@@ -1,13 +1,13 @@
 # Image-to-3D routes and their limits
 
-Both routes below supply initial geometry. Neither establishes final
+The routes below supply initial geometry. Neither establishes final
 manufacturing constraints or fidelity to the user's chosen subject.
 
 | Route | Actual integration | Observed evidence |
 |---|---|---|
 | Official Tencent Hunyuan3D V3.1 website | Host browser interaction with a user's account and available quota | High-poly geometry generation and local model import/render were exercised on 2026-09-09 |
 | Public Tencent Hunyuan3D-2.1 demo | Bundled `hunyuan_shape.py` using Gradio | Anonymous generation returned a GLB on 2026-09-08; downstream repair and slicing were exercised separately |
-| Paid Tencent 3.1 API | Not implemented in this repository | Do not claim connectivity, cost, quota or automatic multi-view support |
+| Official Tencent 3.1 API | Optional V2 `hunyuan31_api.py` using the official SDK; see [API configuration](hunyuan31-api.md) | Offline contract and recovery tests cover the adapter; actual connectivity, quota and generated output require a real job receipt |
 
 For the official route, use the current capabilities visible at
 [Hunyuan 3D](https://3d.hunyuan.tencent.com/studio/creation/geo) through the host's
@@ -18,8 +18,9 @@ If a submission is uncertain, inspect that service task before retrying.
 
 The website's product features are not the bundled helper's API surface.
 Confirm current multi-view support and input limit when actually using it.
-Preserve separate coherent views and their labels; the existing helper still
-submits one image. A service version change does not itself supply a new adapter.
+Preserve separate coherent views and their labels; `hunyuan_shape.py` still
+submits one image. The separate 3.1 API helper validates named slots and requires
+a hash-bound consistency review for supplemental images. A service version change does not itself supply a new adapter.
 No same-protocol 3.1-versus-2.1 benchmark or improvement percentage is asserted
 here. These are observed routes, not bundled models, guaranteed free APIs or
 automatic repair engines.

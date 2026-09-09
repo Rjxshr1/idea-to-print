@@ -2,6 +2,23 @@
 
 [中文](README.md) · [MIT License](LICENSE)
 
+## V2: bounded attempts and resumable execution
+
+Pet and mythical-creature jobs use one ledger with reference, form, detail,
+geometry and slice evidence. Defaults are two generations, three local repairs
+and one reference correction. Repeated non-improvement stops a strategy; the
+best diagnostic candidate is retained without claiming quality acceptance.
+
+V2 adds the optional official Hunyuan3D 3.1 API adapter, actual Blender import /
+regional operations / six-view final-STL rendering, and a provenance-bound
+offline Bambu slicing launcher. A possible API submission without JobId is never
+automatically repeated. Owner rejection cannot be replaced by an Agent review.
+
+See the [V2 protocol](skills/idea-to-print/references/workflow-v2.md),
+[API configuration](skills/printable-modeling/references/hunyuan31-api.md), and
+[model configuration](skills/printable-modeling/references/model-pipeline.md).
+Preview completion, diagnostic handoff and print checks are separate outcomes.
+
 An agent workflow for turning a short idea **or an uploaded image** into a
 reviewable, printable 3D sculpture and an authorized FDM print.
 
@@ -19,8 +36,8 @@ while the agent coordinates versions, authorization and verified device outcomes
 
 The official Tencent Hunyuan3D V3.1 website has been exercised as a high-poly
 draft route using an account and available quota. The bundled
-`hunyuan_shape.py` remains a **Hunyuan3D-2.1 public demo adapter**. A paid 3.1
-API client is not implemented. Browser operation is supplied by the host, not
+`hunyuan_shape.py` remains a **Hunyuan3D-2.1 public demo adapter**. V2 separately
+provides an optional configured official 3.1 API client. Browser operation is supplied by the host, not
 by this helper. No same-protocol improvement percentage, current price or
 guaranteed quota is claimed here.
 

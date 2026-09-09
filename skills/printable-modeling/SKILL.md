@@ -29,8 +29,11 @@ For generated organic meshes or a repair loop, read
 [refinement-and-validation.md](references/refinement-and-validation.md).
 Hunyuan3D V3.1 on the official website is an exercised source of high-poly
 drafts, not the final manufacturing validator. The bundled Python helper is
-still the 2.1 demo adapter; do not claim a paid 3.1 API or multi-view submission
-has been implemented.
+still the 2.1 demo adapter. The separate optional
+[official 3.1 adapter](references/hunyuan31-api.md) supports configured API jobs
+with explicit recovery. Use [V2](../idea-to-print/references/workflow-v2.md) to
+bound attempts and [model_pipeline.py](references/model-pipeline.md) for actual
+import/export, six-view rendering and limited regional operations.
 
 Keep visual resemblance independent from topology: a watertight animal can
 still have the wrong face or plate-like fur. Use Blender Python, sculpting,
