@@ -6,6 +6,10 @@ Turn a short idea, a reference image or an existing model into an editable 3D sc
 
 The project provides **three installable agent skills and Python tools** connecting image generation, Hunyuan3D, Blender and Bambu Studio. It supports pets, mythical creatures and other organic sculptures, including workflows starting from an existing model. An agent runs each stage and retains model versions and their reviews.
 
+<div align="center">
+  <img src="docs/assets/demo.gif" alt="Idea to Print terminal demo: intake an image job, init the workflow ledger, inspect next action and status" width="880">
+</div>
+
 ## Features
 
 | Feature | Capabilities |

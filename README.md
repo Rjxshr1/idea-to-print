@@ -6,6 +6,10 @@
 
 项目包含 **3 个可安装的 Agent 技能和配套 Python 工具**，串联图像生成、混元 3D、Blender 和 Bambu Studio。支持宠物、神兽等有机雕塑，也能从已有 STL/BLEND 开始处理。Agent 根据当前作业状态调用工具，保留每个版本及其检查结果。
 
+<div align="center">
+  <img src="docs/assets/demo.gif" alt="Idea to Print 终端演示：图片建作业、初始化工作流账本、查看下一步与状态" width="880">
+</div>
+
 ## 功能
 
 | 功能 | 提供什么 |
