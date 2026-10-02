@@ -61,6 +61,43 @@ def stale(items):
     return changed
 
 
+def relocate(job, directory):
+    """Follow a moved or renamed job directory.
+
+    Artifact paths are stored absolutely. `job_root` records the directory they
+    were written under; when the job is opened from elsewhere, paths below the
+    old root are rebased. Hashes are untouched, so a file that really changed
+    is still STALE. Paths outside the old root are left as recorded.
+    """
+    current = str(directory)
+    previous = job.get('job_root')
+    if not isinstance(previous, str) or not previous or previous == current:
+        return False
+    old = previous.rstrip('/\\')
+
+    def rebase(value):
+        if value == old:
+            return current
+        if value.startswith(old) and value[len(old)] in '/\\':
+            parts = [part for part in re.split(r'[/\\]', value[len(old):]) if part]
+            return str(Path(current).joinpath(*parts))
+        return value
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == 'path' and isinstance(value, str):
+                    node[key] = rebase(value)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(job)
+    return True
+
+
 def aggregate(states):
     states = list(states)
     if not states or any(state not in STATUSES for state in states):
@@ -134,8 +171,12 @@ def transaction(directory):
                 previous = json.loads(lockpath.read_text(encoding='utf-8'))
             except (OSError, ValueError):
                 raise ValueError('Unrecognized lock owner; reconcile manually without deleting an active lock')
-            if owner_alive(previous) is not False:
-                raise ValueError('Recorded job owner is alive or cannot be verified')
+            # The kernel lock above is already ours, so no local writer is
+            # inside a transaction. Only a provably live local owner blocks;
+            # a record from another host name (renamed machine, container,
+            # WSL/Windows switch) is a leftover from a crashed writer.
+            if owner_alive(previous) is True:
+                raise ValueError('Recorded job owner is alive; wait for it to finish')
             recovered = previous
             lockpath.unlink()
         with lockpath.open('x', encoding='utf-8') as lock:
@@ -144,7 +185,11 @@ def transaction(directory):
         job = json.loads(jobpath.read_text(encoding='utf-8'))
         if recovered is not None:
             job.setdefault('lock_recoveries', []).append({'at': utc(), 'previous_owner': recovered})
+        if relocate(job, directory):
+            job.setdefault('relocations', []).append(
+                {'at': utc(), 'from': job.get('job_root'), 'to': str(directory)})
         yield directory, job
+        job['job_root'] = str(directory)
         temp = directory / ('.refinement-' + uuid.uuid4().hex + '.tmp')
         try:
             temp.write_text(json.dumps(job, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -343,7 +388,9 @@ def execute(args):
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}', args.id):
         raise ValueError('Revision ID must be a short filename-safe identifier')
     if args.command == 'status':
-        job = json.loads((Path(args.job).expanduser().resolve() / 'job.json').read_text(encoding='utf-8'))
+        directory = Path(args.job).expanduser().resolve()
+        job = json.loads((directory / 'job.json').read_text(encoding='utf-8'))
+        relocate(job, directory)  # read-only: rebased in memory, not written
         return status(job, args.id)
     with transaction(args.job) as (directory, job):
         if args.command == 'register':

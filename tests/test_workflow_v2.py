@@ -440,3 +440,46 @@ def test_export_keeps_historical_owner_rejection_even_when_effective_record_is_a
     assert rejected['id'] not in history['current_record_ids']
     assert any(r['id'] == rejected['id'] and r['status'] == 'FAIL' for r in history['owner_reviews'])
     assert flow.status(job)['owner_review'] == 'FAIL'
+
+
+def test_moved_job_directory_keeps_recorded_evidence(flow, job, tmp_path):
+    reference(flow, job)
+    moved = tmp_path / 'renamed-job'
+    job.rename(moved)
+    before = (moved / 'job.json').read_bytes()
+    assert flow.status(moved)['stages']['reference']['status'] == 'PASS'
+    assert (moved / 'job.json').read_bytes() == before  # reads rebase in memory only
+    flow.init(moved)
+    data = read(moved)
+    assert data['job_root'] == str(moved.resolve())
+    assert data['relocations'][-1]['from'] == str(job.resolve())
+    assert str(job.resolve()) not in json.dumps(data['workflow_v2'])
+    # Rebasing a path never excuses changed bytes.
+    Image.new('RGB', (8, 8), 'black').save(moved / 'reference.png')
+    assert flow.status(moved)['stages']['reference']['reason'] == 'STALE evidence'
+
+
+def test_known_remote_task_is_polled_after_reserving_process_exits(flow, job):
+    reference(flow, job)
+    flow.start_attempt(job, 'generate', 'g1', 'hosted', 'initial-shape', inputs=[job / 'reference.png'])
+    assert flow.next_action(job)['action'] == 'wait'
+    finished = subprocess.Popen([sys.executable, '-c', 'pass'])
+    finished.wait()
+    with flow.ledger.transaction(job) as (_, data):
+        owner = data['workflow_v2']['attempts']['g1']['owner']
+        owner['pid'] = finished.pid
+        owner.pop('process_start', None)
+    assert flow.next_action(job)['action'] == 'reconcile'  # no JobId: ambiguity is handed off
+    flow.record_remote(job, 'g1', 'remote-job-1')
+    decision = flow.next_action(job)
+    assert decision['action'] == 'poll_remote' and decision['remote_id'] == 'remote-job-1'
+    with pytest.raises(ValueError, match='unresolved attempt'):
+        flow.start_attempt(job, 'generate', 'g2', 'hosted', 'initial-shape', inputs=[job / 'reference.png'])
+
+
+def test_crashed_lock_from_another_host_name_is_recovered(flow, job):
+    lock = job / '.refinement.lock'
+    lock.write_text(json.dumps({'pid': 1, 'host': 'previous-host-name', 'at': 'fixture'}))
+    flow.init(job)
+    assert not lock.exists()
+    assert read(job)['lock_recoveries'][-1]['previous_owner']['host'] == 'previous-host-name'

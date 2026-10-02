@@ -25,7 +25,7 @@ The project provides **three installable agent skills and Python tools** connect
 | Bambu slicing | Fixed placement, machine/process/filament snapshots, a Windows offline CLI launcher and native-result verification |
 | Preview and delivery | Open exact extracted G-code, retain layer screenshots, and export models, slices, review history and a file manifest |
 
-Owner and agent judgments are stored separately. An agent review cannot erase an owner's rejection of the same mesh. Changed models, profiles or images invalidate affected checks. Results retain `PASS / FAIL / UNKNOWN`; exhausted attempts produce the best candidate with outstanding work.
+Owner and agent judgments are stored separately. An agent review cannot erase an owner's rejection of the same mesh. Changed models, profiles or images invalidate affected checks. Results retain `PASS / FAIL / UNKNOWN`; exhausted attempts produce the best candidate with outstanding work. The bundled geometry gate reports self-intersection, minimum wall/detail/connection, base contact and stability as `UNKNOWN`, so with the bundled tools alone a job ends at `preview_complete` and is never marked `print_ready`. A job directory can be moved or renamed as a whole; recorded evidence paths follow it.
 
 ## Usage examples
 

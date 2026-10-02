@@ -59,7 +59,11 @@ An uncertain cloud submission blocks another submission until reconciled. Known
 remote JobId means resume polling that task. No JobId after a possible submission
 means hand off the ambiguity, never submit again automatically. A local waiting
 timeout is not a provider failure. Download failures resume download, not mesh
-generation. Use the official [3.1 adapter](../../printable-modeling/references/hunyuan31-api.md).
+generation. While a reserved attempt has a recorded JobId and is not uncertain,
+`next` returns `poll_remote` with that `remote_id`: query or download that same
+task. It returns `wait` only while the reserving process is still alive, and
+`reconcile` for an uncertain outcome or a dead owner with no JobId.
+Use the official [3.1 adapter](../../printable-modeling/references/hunyuan31-api.md).
 
 When a strategy or budget stops, deliver the best candidate with defects,
 comparison renders, editable source, protected regions and suggested next work.
@@ -102,7 +106,11 @@ package audit and filament summary for material figures.
 ## Delivery states
 
 `preview_complete` describes a reviewed pre-print package. `print_ready` has the
-separate conservative geometry and review requirements. An unresolved shape or
+separate conservative geometry and review requirements: all 16 fixed geometry
+checks must PASS. The bundled `printability_gate.py` reports self-intersection,
+minimum wall/detail/connection, base contact and stability as `UNKNOWN` by
+design, so with the bundled tools alone a job ends at `preview_complete`;
+`print_ready` needs a validator that actually covers those checks. An unresolved shape or
 manufacturing defect can still produce a diagnostic handoff, with FAIL/UNKNOWN
 visible. Geometry UNKNOWN is not solved by rerunning an unsupported checker.
 No workflow result grants permission to start or schedule a physical print.
@@ -112,6 +120,10 @@ slice package, key screenshots and manifest. Re-running export for the same
 snapshot is idempotent. Changed model, reference, profile, package or evidence
 invalidates affected checks; never use last revision's screenshots for the new
 model. Continue only within the requested model/pre-print/print scope.
+A job directory may be moved or renamed as a whole: recorded paths below the
+old root are rebased on the next command and hashes are still verified. Files
+recorded from outside the job directory are not followed, and a previous
+terminal `complete` needs one fresh `export` after a move.
 After a fresh export `next` returns terminal `complete`; any changed candidate,
 review or damaged delivered file invalidates that terminal snapshot.
 
