@@ -50,6 +50,7 @@ def _load(job_dir):
     root = _root(job_dir)
     job = json.loads((root / 'job.json').read_text(encoding='utf-8'))
     _workflow(job)
+    ledger.relocate(job, root)  # read-only: rebased in memory, not written
     return root, job
 
 
@@ -311,8 +312,22 @@ def _next(job, stages):
     if pending:
         attempt = pending[0]
         alive = ledger.owner_alive(attempt['owner'])
-        return {'stage': 'attempt', 'action': 'reconcile' if attempt['status'] == 'uncertain' or alive is not True else 'wait',
-                'attempt_id': attempt['id'], 'owner_alive': alive, 'reason': 'Do not submit another operation while outcome is unresolved'}
+        if attempt['status'] == 'uncertain':
+            action = 'reconcile'
+        elif alive is True:
+            action = 'wait'
+        elif attempt.get('remote_id'):
+            # CLI helpers exit after each call, so the reserving process is
+            # normally gone while the provider still works on a known task.
+            action = 'poll_remote'
+        else:
+            action = 'reconcile'
+        result = {'stage': 'attempt', 'action': action, 'attempt_id': attempt['id'], 'owner_alive': alive,
+                  'reason': 'Do not submit another operation while outcome is unresolved'}
+        if action == 'poll_remote':
+            result.update(remote_id=attempt['remote_id'], adapter=attempt.get('adapter'),
+                          reason='Query or download this same remote task; never submit it again')
+        return result
     stale_attempts = _stale_attempts(workflow)
     if stale_attempts:
         return {'stage': 'evidence', 'action': 'reconcile_artifacts', 'attempt_ids': sorted(stale_attempts),
@@ -745,7 +760,9 @@ def export(job_dir, *, revision=None, destination=None):
                 shutil.copy2(source, target)
                 if ledger.sha(target) != item['sha256']:
                     raise ValueError('Export copy hash mismatch')
-                files.append({'path': relative, 'sha256': item['sha256'], 'bytes': item['bytes'], 'source': item['path']})
+                # Deliverables are shared: keep job-relative sources, not local home paths.
+                origin = source.relative_to(root).as_posix() if source.is_relative_to(root) else source.name
+                files.append({'path': relative, 'sha256': item['sha256'], 'bytes': item['bytes'], 'source': origin})
             _atomic_json(staging / 'status.json', result)
             status_artifact = ledger.artifact(staging / 'status.json')
             files.append({'path': 'status.json', 'sha256': status_artifact['sha256'], 'bytes': status_artifact['bytes']})
