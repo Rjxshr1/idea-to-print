@@ -11,7 +11,7 @@
   "degenerate_area_mm2": 1e-12,
   "rules": {"wall_min_mm": 1.2, "detail_min_mm": 0.8, "connection_min_mm": 1.5},
   "regions": [],
-  "thickness_sampling": {"enabled": false, "max_samples": 128, "max_candidates": 32},
+  "thickness": {"sample_spacing_mm": null, "max_thin_patch_area_mm2": 0, "max_samples": 5000000},
   "base": {"plane_tolerance_mm": 0.05, "min_contact_area_mm2": null, "min_stability_margin_mm": null, "min_tip_angle_deg": null},
   "intersection_search": {"max_candidate_pairs": 20000000},
   "required_checks": [

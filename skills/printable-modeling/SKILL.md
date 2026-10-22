@@ -47,8 +47,8 @@ mesh and profile hash. Use the companion
 retain unsupported checks as unknown. Scope wall/detail/connection targets by
 part, nozzle, material and intended handling, and base contact/stability targets
 by how the object will stand. The gate tests self-intersection on every face
-pair; sampling and visually plausible results still do not establish a global
-thickness minimum.
+pair and measures thickness on every face at a stated sample spacing; pointed
+tips need a small thin-patch tolerance or relaxed region rules.
 
 ## Execute and verify
 

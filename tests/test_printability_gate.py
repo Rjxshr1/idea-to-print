@@ -114,7 +114,9 @@ class TestSyntheticMeshes(unittest.TestCase):
         report = self.run_mesh(self.box(), profile)
         self.assertEqual(report["overall"], "UNKNOWN")
         self.assertEqual(report["checks"]["self_intersection"]["status"], "PASS")
-        for key in ("minimum_wall", "minimum_detail", "minimum_connection"):
+        self.assertEqual(report["checks"]["minimum_wall"]["status"], "PASS")
+        # Rules that are not configured for the part stay unknown.
+        for key in ("minimum_detail", "minimum_connection"):
             self.assertIn(key, report["unknown_required_checks"])
         # Without part-specific base thresholds, contact and stability stay diagnostic.
         self.assertIn("base_contact", report["unknown_required_checks"])
@@ -194,29 +196,28 @@ class TestSyntheticMeshes(unittest.TestCase):
         self.assertEqual(report["checks"]["components"]["status"], "UNKNOWN")
         self.assertEqual(report["checks"]["vertex_manifold"]["status"], "UNKNOWN")
 
-    @unittest.skipUnless(importlib.util.find_spec("rtree"), "Optional rtree sampling backend")
-    def test_thickness_sampling_finds_thin_slab_but_never_proves_thick_slab(self):
+    @unittest.skipUnless(importlib.util.find_spec("rtree"), "Optional rtree backend")
+    def test_thickness_finds_thin_slab_and_passes_thick_slab(self):
         profile = basic_profile()
         profile["required_checks"].append("minimum_wall")
-        profile["thickness_sampling"] = {"enabled": True, "max_samples": 64}
         thin = self.run_mesh(self.box((20, 20, .6)), profile)
         self.assertEqual(thin["checks"]["minimum_wall"]["status"], "FAIL", thin)
-        self.assertGreater(thin["checks"]["minimum_wall"]["measured"]["candidate_count"], 0)
+        self.assertGreater(thin["checks"]["minimum_wall"]["measured"]["thin_samples"], 0)
         thick = self.run_mesh(self.box((20, 20, 5)), profile)
-        self.assertEqual(thick["checks"]["minimum_wall"]["status"], "UNKNOWN")
-        self.assertEqual(thick["overall"], "UNKNOWN")
+        self.assertEqual(thick["checks"]["minimum_wall"]["status"], "PASS")
+        self.assertEqual(thick["overall"], "PASS")
 
-    @unittest.skipUnless(importlib.util.find_spec("rtree"), "Optional rtree sampling backend")
-    def test_region_wall_rule_changes_risk_without_rewriting_geometry(self):
+    @unittest.skipUnless(importlib.util.find_spec("rtree"), "Optional rtree backend")
+    def test_region_wall_rule_changes_result_without_rewriting_geometry(self):
         profile = basic_profile()
+        profile["required_checks"].append("minimum_wall")
         profile["rules"]["wall_min_mm"] = .5
-        profile["thickness_sampling"] = {"enabled": True, "max_samples": 64}
         base = self.run_mesh(self.box((20, 20, .6)), profile)
-        self.assertEqual(base["checks"]["minimum_wall"]["status"], "UNKNOWN")
+        self.assertEqual(base["checks"]["minimum_wall"]["status"], "PASS")
         profile["regions"] = [{"id": "reinforced-area", "bounds_mm": [[-20, -20, -1], [20, 20, 1]], "rules": {"wall_min_mm": 1.2}}]
         reinforced = self.run_mesh(self.box((20, 20, .6)), profile)
         self.assertEqual(reinforced["checks"]["minimum_wall"]["status"], "FAIL")
-        self.assertIn("reinforced-area", reinforced["checks"]["minimum_wall"]["measured"]["candidates"][0]["regions"])
+        self.assertIn("reinforced-area", reinforced["checks"]["minimum_wall"]["measured"]["regions_with_thin_samples"])
 
     def test_cli_exit_codes_match_saved_reports(self):
         config, out = Path(self.tmp.name) / "profile.json", Path(self.tmp.name) / "report.json"
