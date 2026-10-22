@@ -8,6 +8,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import importlib
+import importlib.util
 import json
 import math
 from pathlib import Path
@@ -24,6 +25,11 @@ CHECK_IDS = (
 EXIT_CODES = {"PASS": 0, "FAIL": 2, "UNKNOWN": 3}
 EXTERNAL_CATEGORIES = {"appearance_fidelity": "appearance", "slicer_islands": "slice", "support_removal": "slice"}
 GEOMETRY_CHECKS = tuple(key for key in CHECK_IDS if key not in EXTERNAL_CATEGORIES)
+# Base thresholds are part-specific; a missing threshold leaves its check UNKNOWN.
+BASE_DEFAULTS = {"plane_tolerance_mm": 0.05, "min_contact_area_mm2": None,
+                 "min_stability_margin_mm": None, "min_tip_angle_deg": None}
+MAX_CANDIDATE_PAIRS = 20_000_000
+QUERY_CHUNK = 50_000
 
 
 def file_hash(path):
@@ -58,7 +64,7 @@ def validate_profile(profile):
     allowed = {"schema_version", "id", "description", "units", "required_checks",
                "build_volume_mm", "reserve_total_mm", "max_components",
                "degenerate_area_mm2", "expected_mesh_sha256", "rules", "regions",
-               "thickness_sampling", "process", "scope"}
+               "thickness_sampling", "base", "intersection_search", "process", "scope"}
     unexpected = set(profile) - allowed
     if unexpected:
         raise ValueError(f"Unknown profile keys (no result overrides allowed): {sorted(unexpected)}")
@@ -127,6 +133,22 @@ def validate_profile(profile):
         value = sampling.get(key, default)
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= limit:
             raise ValueError(f"thickness_sampling.{key} must be 1..{limit}")
+    base = profile.get("base", {})
+    if not isinstance(base, dict) or set(base) - set(BASE_DEFAULTS):
+        raise ValueError(f"base supports only {sorted(BASE_DEFAULTS)}")
+    for key, value in base.items():
+        if value is not None:
+            finite_number(value, f"base.{key}", strictly_positive=True)
+    if base.get("plane_tolerance_mm") is not None and base["plane_tolerance_mm"] > 1:
+        raise ValueError("base.plane_tolerance_mm must be at most 1 mm")
+    if base.get("min_tip_angle_deg") is not None and base["min_tip_angle_deg"] >= 90:
+        raise ValueError("base.min_tip_angle_deg must be below 90")
+    search = profile.get("intersection_search", {})
+    if not isinstance(search, dict) or set(search) - {"max_candidate_pairs"}:
+        raise ValueError("intersection_search supports only max_candidate_pairs")
+    pairs = search.get("max_candidate_pairs", MAX_CANDIDATE_PAIRS)
+    if isinstance(pairs, bool) or not isinstance(pairs, int) or not 1 <= pairs <= 200_000_000:
+        raise ValueError("intersection_search.max_candidate_pairs must be 1..200000000")
     return profile
 
 
@@ -168,12 +190,12 @@ def finish(report):
 def establish_unknowns(report, profile):
     rules = {"global": profile.get("rules", {}), "regions": profile.get("regions", [])}
     for key, reason in {
-        "self_intersection": "No exhaustive, validated triangle self-intersection backend is implemented.",
+        "self_intersection": "Not executed: requires a parsed mesh without degenerate faces and the rtree backend.",
         "minimum_wall": "Surface sampling cannot certify the minimum thickness of every part of a mesh.",
         "minimum_detail": "Semantic detail/relief size requires part identification and resolved toolpath checks.",
         "minimum_connection": "A bounding box or ray thickness does not certify a load-bearing connection.",
-        "base_contact": "Exact-plane geometry alone does not establish first-layer contact after slicing.",
-        "stability": "Mass, infill, support polygon and physical loading have not been fully validated.",
+        "base_contact": "Not executed: requires consistent outward normals and base.min_contact_area_mm2.",
+        "stability": "Not executed: requires a single closed outward shell, a support footprint and a base stability threshold.",
         "appearance_fidelity": "Photo/design fidelity is an independent visual review; topology cannot certify it.",
         "slicer_islands": "Unsupported starts require a sliced layer/toolpath inspection of this exact model.",
         "support_removal": "Support accessibility, trapped supports and removal damage require separate review.",
@@ -246,6 +268,319 @@ def thickness_risks(report, mesh, profile, np):
                              minimum_observed_ray_mm=float(distances.min()) if len(distances) else None)
     if candidates:
         check["status"] = "FAIL"
+
+
+def base_settings(profile):
+    configured = {key: value for key, value in profile.get("base", {}).items() if value is not None}
+    return {**BASE_DEFAULTS, **configured}
+
+
+def _orientation_ok(report):
+    return all(report["checks"][key]["status"] == "PASS" for key in ("winding", "outward_normals"))
+
+
+def footprint_hull(points, np):
+    """2-D convex hull of support points, or None for a point/line footprint."""
+    spatial = importlib.import_module("scipy.spatial")
+    unique = np.unique(points, axis=0)
+    if len(unique) < 3:
+        return None
+    try:
+        hull = spatial.ConvexHull(unique)
+    except getattr(spatial, "QhullError", Exception):
+        return None
+    return hull if hull.volume > 1e-12 else None
+
+
+def base_contact(report, mesh, profile, np):
+    """Downward faces within plane_tolerance_mm of the lowest point, in the fixed print orientation."""
+    settings = base_settings(profile)
+    tolerance = settings["plane_tolerance_mm"]
+    bottom = float(mesh.bounds[0, 2])
+    normals_z = mesh.face_normals[:, 2]
+    contact = np.all(mesh.triangles[:, :, 2] <= bottom + tolerance, axis=1) & (normals_z < 0)
+    area = float((mesh.area_faces * np.abs(normals_z))[contact].sum())
+    support_points = mesh.vertices[mesh.vertices[:, 2] <= bottom + tolerance][:, :2]
+    footprint = {"bottom": bottom, "tolerance": tolerance, "points": support_points, "hull": None}
+    measured = {"minimum_z_mm": bottom, "contact_faces": int(contact.sum()),
+                "projected_contact_area_mm2": area, "support_vertices": int(len(support_points))}
+    try:
+        footprint["hull"] = footprint_hull(support_points, np)
+        measured["footprint_hull_area_mm2"] = float(footprint["hull"].volume) if footprint["hull"] else 0.0
+    except ImportError as exc:
+        footprint = None
+        measured["footprint_hull_area_mm2"] = None
+        hull_note = [f"scipy.spatial unavailable for the support footprint: {exc}"]
+    else:
+        hull_note = []
+    threshold = settings["min_contact_area_mm2"]
+    method = "projected area of downward faces whose vertices all lie within plane_tolerance_mm of the lowest point"
+    limitations = hull_note + [
+        "Fixed orientation; the lowest point defines the bed plane. Brim, rafts, supports and slicer first-layer "
+        "compensation are not modelled.",
+        "Contact area is geometric; adhesion, warping and elephant-foot effects require slice and print review.",
+    ]
+    thresholds = {"min_contact_area_mm2": threshold, "plane_tolerance_mm": tolerance}
+    if not _orientation_ok(report):
+        set_check(report, "base_contact", "UNKNOWN", method, measured, thresholds,
+                  ["Face orientation is not verified (winding/outward_normals must PASS)."] + limitations)
+    elif threshold is None:
+        set_check(report, "base_contact", "UNKNOWN", method, measured, thresholds,
+                  ["No base.min_contact_area_mm2 is configured for this part; area is diagnostic only."] + limitations)
+    else:
+        set_check(report, "base_contact", "PASS" if area >= threshold else "FAIL", method, measured, thresholds, limitations)
+    return footprint
+
+
+def stability(report, mesh, profile, np, footprint):
+    """Centre-of-mass margin inside the support footprint for solid and hollow-shell mass models."""
+    settings = base_settings(profile)
+    margin_min, tip_min = settings["min_stability_margin_mm"], settings["min_tip_angle_deg"]
+    method = ("centre of mass projected into the convex hull of support points; evaluated for a uniform solid, "
+              "a uniform thin shell and 9 blends between them (the printed part lies between those mass models)")
+    thresholds = {"min_stability_margin_mm": margin_min, "min_tip_angle_deg": tip_min,
+                  "plane_tolerance_mm": settings["plane_tolerance_mm"]}
+    limitations = [
+        "Rigid body on a flat, level surface in the fixed print orientation with gravity along -Z; supports, "
+        "brim and external loads are excluded.",
+        "Uniform material density is assumed; multi-material parts, inserts or weights change the result.",
+        "Margin is the distance to the nearest footprint edge line; negative means the centre of mass is outside.",
+    ]
+    if report["checks"]["outward_normals"]["status"] != "PASS" or report["checks"]["components"]["status"] != "PASS":
+        set_check(report, "stability", "UNKNOWN", method, thresholds=thresholds,
+                  limitations=["A single closed shell with verified outward normals is required for mass properties."] + limitations)
+        return
+    if footprint is None:
+        set_check(report, "stability", "UNKNOWN", method, thresholds=thresholds,
+                  limitations=["scipy.spatial is required for the support footprint."] + limitations)
+        return
+    triangles = mesh.triangles
+    # Solid centroid from signed tetrahedra against the origin; valid for a closed outward shell.
+    volumes = np.einsum("ij,ij->i", triangles[:, 0], np.cross(triangles[:, 1], triangles[:, 2])) / 6
+    solid = (volumes[:, None] * triangles.sum(axis=1) / 4).sum(axis=0) / volumes.sum()
+    shell = (mesh.area_faces[:, None] * triangles.mean(axis=1)).sum(axis=0) / mesh.area_faces.sum()
+    blends = np.linspace(0, 1, 11)[:, None]
+    centres = shell * (1 - blends) + solid * blends
+    measured = {"solid_centre_of_mass_mm": solid.tolist(), "shell_centre_of_mass_mm": shell.tolist(),
+                "footprint_hull_area_mm2": float(footprint["hull"].volume) if footprint["hull"] else 0.0}
+    if footprint["hull"] is None:
+        measured.update(min_margin_mm=None, min_tip_angle_deg=0.0)
+        set_check(report, "stability", "FAIL", method, measured, thresholds,
+                  ["The support footprint is a point or a line; the part cannot stand without support."] + limitations)
+        return
+    equations = footprint["hull"].equations
+    margins = -(centres[:, :2] @ equations[:, :2].T + equations[:, 2]).max(axis=1)
+    heights = np.maximum(centres[:, 2] - footprint["bottom"], 1e-9)
+    tips = np.degrees(np.arctan2(margins, heights))
+    worst = int(np.argmin(margins))
+    measured.update(min_margin_mm=float(margins.min()), min_tip_angle_deg=float(tips.min()),
+                    worst_mass_model={"solid_fraction": float(blends[worst, 0]), "centre_of_mass_mm": centres[worst].tolist()},
+                    centre_height_mm=float(heights[worst]))
+    if margins.min() <= 0:
+        status = "FAIL"
+        limitations = ["The centre of mass lies on or outside the support footprint."] + limitations
+    elif margin_min is None and tip_min is None:
+        status = "UNKNOWN"
+        limitations = ["No base.min_stability_margin_mm or base.min_tip_angle_deg is configured; values are diagnostic."] + limitations
+    else:
+        failed = (margin_min is not None and margins.min() < margin_min) or (tip_min is not None and tips.min() < tip_min)
+        status = "FAIL" if failed else "PASS"
+    set_check(report, "stability", status, method, measured, thresholds, limitations)
+
+
+def _unit_normals(t, np):
+    normal = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+    return normal / np.linalg.norm(normal, axis=1, keepdims=True)
+
+
+def _segment_hits_triangle(p0, p1, t, eps, np):
+    """Segment crosses or touches a non-coplanar triangle. Segments lying in the plane return False:
+    their contacts are found by the remaining edge tests of the same pair."""
+    normal = _unit_normals(t, np)
+    d0 = np.einsum("ij,ij->i", p0 - t[:, 0], normal)
+    d1 = np.einsum("ij,ij->i", p1 - t[:, 0], normal)
+    in_plane = (np.abs(d0) <= eps) & (np.abs(d1) <= eps)
+    crosses = ~(((d0 > eps) & (d1 > eps)) | ((d0 < -eps) & (d1 < -eps))) & ~in_plane
+    denominator = d0 - d1
+    safe = np.where(np.abs(denominator) > 0, denominator, 1.0)
+    fraction = np.clip(np.where(np.abs(denominator) > 0, d0 / safe, 0.0), 0, 1)
+    point = p0 + fraction[:, None] * (p1 - p0)
+    inside = np.ones(len(p0), dtype=bool)
+    for a, b in ((0, 1), (1, 2), (2, 0)):
+        edge = t[:, b] - t[:, a]
+        side = np.einsum("ij,ij->i", np.cross(edge, point - t[:, a]), normal) / np.linalg.norm(edge, axis=1)
+        inside &= side >= -eps
+    return crosses & inside
+
+
+def _project(points, drop, np):
+    keep = np.array([[1, 2], [0, 2], [0, 1]])[drop]
+    return np.take_along_axis(points, np.repeat(keep[:, None, :], points.shape[1], axis=1), axis=2)
+
+
+def _cross2(u, v):
+    return u[..., 0] * v[..., 1] - u[..., 1] * v[..., 0]
+
+
+def _segments_touch_2d(p1, p2, q1, q2, eps, np):
+    def side(a, b, c):
+        value = _cross2(b - a, c - a) / np.maximum(np.linalg.norm(b - a, axis=1), 1e-300)
+        return np.where(np.abs(value) <= eps, 0, np.sign(value))
+    s1, s2, s3, s4 = side(p1, p2, q1), side(p1, p2, q2), side(q1, q2, p1), side(q1, q2, p2)
+    collinear = (s1 == 0) & (s2 == 0)
+    overlap = np.all((np.minimum(p1, p2) <= np.maximum(q1, q2) + eps) & (np.minimum(q1, q2) <= np.maximum(p1, p2) + eps), axis=1)
+    return np.where(collinear, overlap, (s1 * s2 <= 0) & (s3 * s4 <= 0))
+
+
+def _point_in_triangle_2d(p, t, eps, np):
+    orientation = np.sign(_cross2(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]))
+    inside = np.ones(len(p), dtype=bool)
+    for a, b in ((0, 1), (1, 2), (2, 0)):
+        edge = t[:, b] - t[:, a]
+        inside &= orientation * _cross2(edge, p - t[:, a]) / np.linalg.norm(edge, axis=1) >= -eps
+    return inside
+
+
+def _coplanar_overlap(a, b, shared_a, shared_b, count, normal, eps, np):
+    """Positive-area overlap (or touching for unrelated faces) of coplanar triangle pairs."""
+    result = np.zeros(len(a), dtype=bool)
+    drop = np.argmax(np.abs(normal), axis=1)
+    a2, b2 = _project(a, drop, np), _project(b, drop, np)
+    rows = np.arange(len(a))
+    # Shared edge: overlap when the opposite vertices lie on the same side of that edge.
+    edge = count == 2
+    if edge.any():
+        order = np.argsort(~shared_a[edge], axis=1, kind="stable")
+        r = rows[edge]
+        s, t, opposite_a = a2[r, order[:, 0]], a2[r, order[:, 1]], a2[r, order[:, 2]]
+        opposite_b = b2[r, np.argmin(shared_b[edge], axis=1)]
+        length = np.linalg.norm(t - s, axis=1)
+        side_a, side_b = _cross2(t - s, opposite_a - s) / length, _cross2(t - s, opposite_b - s) / length
+        result[r] = ((side_a > eps) & (side_b > eps)) | ((side_a < -eps) & (side_b < -eps))
+    # Shared vertex: overlap when the two open angular sectors at that vertex overlap.
+    vertex = count == 1
+    if vertex.any():
+        r = rows[vertex]
+        order_a = np.argsort(shared_a[vertex], axis=1, kind="stable")
+        order_b = np.argsort(shared_b[vertex], axis=1, kind="stable")
+        s = a2[r, order_a[:, 2]]
+
+        def direction(points, index):
+            value = points[r, index] - s
+            return value / np.linalg.norm(value, axis=1, keepdims=True)
+
+        u1, u2 = direction(a2, order_a[:, 0]), direction(a2, order_a[:, 1])
+        w1, w2 = direction(b2, order_b[:, 0]), direction(b2, order_b[:, 1])
+        angular = 1e-9
+
+        def in_sector(v, first, second):
+            sign = np.sign(_cross2(first, second))
+            return (sign * _cross2(first, v) > angular) & (sign * _cross2(v, second) > angular)
+
+        def same(v, w):
+            return (np.abs(_cross2(v, w)) <= angular) & (np.einsum("ij,ij->i", v, w) > 0)
+
+        result[r] = (in_sector(w1, u1, u2) | in_sector(w2, u1, u2) | in_sector(u1, w1, w2) | in_sector(u2, w1, w2)
+                     | (same(u1, w1) & same(u2, w2)) | (same(u1, w2) & same(u2, w1)))
+    # Unrelated coplanar faces: any edge contact or containment.
+    free = count == 0
+    if free.any():
+        r = rows[free]
+        pa, pb = a2[r], b2[r]
+        hit = _point_in_triangle_2d(pa[:, 0], pb, eps, np) | _point_in_triangle_2d(pb[:, 0], pa, eps, np)
+        for i, j in ((0, 1), (1, 2), (2, 0)):
+            for k, m in ((0, 1), (1, 2), (2, 0)):
+                hit |= _segments_touch_2d(pa[:, i], pa[:, j], pb[:, k], pb[:, m], eps, np)
+        result[r] = hit
+    return result
+
+
+def triangle_pairs_intersect(triangles, faces, first, second, eps, np):
+    """Adjacency-aware triangle pair test. Contact only at shared vertices/edges is not an intersection."""
+    a, b = triangles[first], triangles[second]
+    equal = faces[first][:, :, None] == faces[second][:, None, :]
+    shared_a, shared_b = equal.any(axis=2), equal.any(axis=1)
+    count = shared_a.sum(axis=1)
+    normal_a, normal_b = _unit_normals(a, np), _unit_normals(b, np)
+    distance_b = np.where(shared_b, 0.0, np.einsum("pvj,pj->pv", b - a[:, :1], normal_a))
+    distance_a = np.where(shared_a, 0.0, np.einsum("pvj,pj->pv", a - b[:, :1], normal_b))
+    separated = ((distance_b > eps).all(axis=1) | (distance_b < -eps).all(axis=1)
+                 | (distance_a > eps).all(axis=1) | (distance_a < -eps).all(axis=1))
+    coplanar = (np.abs(distance_a) <= eps).all(axis=1) & (np.abs(distance_b) <= eps).all(axis=1)
+    result = count == 3
+    rows = np.arange(len(first))
+    planar = coplanar & (count < 3)
+    if planar.any():
+        result[planar] = _coplanar_overlap(a[planar], b[planar], shared_a[planar], shared_b[planar],
+                                           count[planar], normal_a[planar], eps, np)
+    free = ~separated & ~coplanar & (count == 0)
+    if free.any():
+        r = rows[free]
+        hit = np.zeros(len(r), dtype=bool)
+        for i, j in ((0, 1), (1, 2), (2, 0)):
+            hit |= _segment_hits_triangle(a[r, i], a[r, j], b[r], eps, np)
+            hit |= _segment_hits_triangle(b[r, i], b[r, j], a[r], eps, np)
+        result[r] = hit
+    # One shared vertex: the faces meet elsewhere only if an edge opposite the shared vertex hits the other face.
+    corner = ~separated & ~coplanar & (count == 1)
+    if corner.any():
+        r = rows[corner]
+        order_a = np.argsort(shared_a[r], axis=1, kind="stable")
+        order_b = np.argsort(shared_b[r], axis=1, kind="stable")
+        result[r] = (_segment_hits_triangle(a[r, order_a[:, 0]], a[r, order_a[:, 1]], b[r], eps, np)
+                     | _segment_hits_triangle(b[r, order_b[:, 0]], b[r, order_b[:, 1]], a[r], eps, np))
+    # Two shared vertices and distinct planes meet only along the shared edge.
+    return result
+
+
+def self_intersection(report, mesh, profile, np, trimesh):
+    limit = profile.get("intersection_search", {}).get("max_candidate_pairs", MAX_CANDIDATE_PAIRS)
+    method = ("exhaustive axis-aligned bounding-box broadphase (rtree) over every face pair, then float64 "
+              "triangle-pair tests aware of shared vertices/edges and coplanar overlap")
+    thresholds = {"maximum_intersecting_pairs": 0, "max_candidate_pairs": limit}
+    if report["checks"]["degenerate_faces"]["status"] != "PASS":
+        set_check(report, "self_intersection", "UNKNOWN", method, thresholds=thresholds,
+                  limitations=["Degenerate faces have no defined plane; remove them before this test."])
+        return
+    if importlib.util.find_spec("rtree") is None:
+        set_check(report, "self_intersection", "UNKNOWN", method, thresholds=thresholds,
+                  limitations=["Optional rtree backend is not installed (requirements-modeling.txt)."])
+        return
+    triangles = np.asarray(mesh.triangles, dtype=np.float64)
+    faces = np.asarray(mesh.faces)
+    eps = max(float(np.max(mesh.extents)) * 1e-9, 1e-12)
+    low, high = triangles.min(axis=1) - eps, triangles.max(axis=1) + eps
+    tree = trimesh.util.bounds_tree(np.column_stack((low, high)))
+    candidates, intersecting, samples = 0, 0, []
+    for start in range(0, len(faces), QUERY_CHUNK):
+        stop = min(start + QUERY_CHUNK, len(faces))
+        ids, counts = tree.intersection_v(low[start:stop], high[start:stop])
+        first = np.repeat(np.arange(start, stop), np.asarray(counts, dtype=np.int64))
+        second = np.asarray(ids, dtype=np.int64)
+        keep = first < second
+        first, second = first[keep], second[keep]
+        candidates += len(first)
+        if candidates > limit:
+            set_check(report, "self_intersection", "UNKNOWN", method,
+                      {"candidate_pairs_so_far": candidates, "intersecting_pairs_so_far": intersecting,
+                       "sample_face_pairs": samples, "tolerance_mm": eps}, thresholds,
+                      ["Candidate pair budget exceeded before the search completed; raise "
+                       "intersection_search.max_candidate_pairs or simplify the mesh."])
+            return
+        if not len(first):
+            continue
+        hits = triangle_pairs_intersect(triangles, faces, first, second, eps, np)
+        intersecting += int(hits.sum())
+        for pair in np.column_stack((first[hits], second[hits]))[:64 - len(samples)]:
+            samples.append([int(pair[0]), int(pair[1])])
+    set_check(report, "self_intersection", "FAIL" if intersecting else "PASS", method,
+              {"candidate_pairs": candidates, "intersecting_pairs": intersecting,
+               "sample_face_pairs": samples, "tolerance_mm": eps}, thresholds,
+              [f"Floating-point predicates with a {eps:.3g} mm tolerance, not exact arithmetic; touching "
+               "within that tolerance counts as intersecting.",
+               "Vertices are shared only when coordinates are identical; an unwelded touching contact counts "
+               "as an intersection.",
+               "No intersection does not establish wall thickness, connection strength or printability."])
 
 
 def inspect(mesh_path, profile, profile_path=None):
@@ -364,11 +699,9 @@ def inspect(mesh_path, profile, profile_path=None):
               {"dimensions_mm": mesh.extents.tolist(), "remaining_mm": (available - mesh.extents).tolist()},
               {"build_volume_mm": build.tolist(), "reserve_total_mm": reserve.tolist(), "available_mm": available.tolist()},
               ["Does not place or rotate the object; support, brim, purge and bed exclusions require slicer verification."])
-    bottom = float(mesh.bounds[0, 2])
-    flat = np.all(np.abs(mesh.triangles[:, :, 2] - bottom) <= 1e-6, axis=1) & (mesh.face_normals[:, 2] < -.9)
-    report["checks"]["base_contact"]["measured"] = {"minimum_z_mm": bottom, "planar_bottom_area_mm2": float(areas[flat].sum()),
-                                                         "planar_bottom_faces": int(flat.sum()), "plane_tolerance_mm": 1e-6}
-    report["checks"]["base_contact"]["method"] = "diagnostic downward triangles on lowest plane; not a contact acceptance test"
+    footprint = base_contact(report, mesh, profile, np)
+    stability(report, mesh, profile, np, footprint)
+    self_intersection(report, mesh, profile, np, trimesh)
     thickness_risks(report, mesh, profile, np)
     if file_hash(path) != before:
         set_check(report, "input_integrity", "FAIL", "SHA256 before and after inspection", limitations=["Input changed during inspection; results are invalid."])

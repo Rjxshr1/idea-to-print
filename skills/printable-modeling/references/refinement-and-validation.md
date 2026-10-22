@@ -89,6 +89,25 @@ settings or universal safety minima.
   detected risk under that method. Even all samples above threshold leave the
   complete minimum wall measurement `UNKNOWN`; this is not a whole-surface
   thickness certificate.
+- `base` sets the contact and stability targets for this part in its fixed
+  print orientation. `plane_tolerance_mm` (default 0.05) is the band above the
+  lowest point treated as the bed plane. `min_contact_area_mm2` is compared
+  with the projected area of downward faces in that band. `min_stability_margin_mm`
+  is the shortest distance from the centre of mass to the edge of the support
+  footprint (the convex hull of points in the band). `min_tip_angle_deg` is
+  how far the part can tilt before it tips over. The centre of mass is evaluated
+  for a uniform solid, a uniform thin shell and blends between them, because a
+  printed part with sparse infill lies between those models; the worst value
+  is reported. A threshold left `null` keeps its check `UNKNOWN` with the
+  measurements as diagnostics. A point or line footprint, or a centre of mass
+  outside the footprint, is a `FAIL` even without a threshold. Choose the
+  values from the real part: a figurine on a shelf needs a larger margin than
+  a part that will be glued down.
+- `intersection_search.max_candidate_pairs` (default 20,000,000) bounds the
+  self-intersection search. It compares every pair of faces whose bounding
+  boxes overlap, so time grows with face count: about 15 s for 330k faces and
+  roughly a minute for 1.5M faces on a laptop CPU. When the budget is exceeded
+  the result is `UNKNOWN`, never `PASS`; simplify the mesh or raise the budget.
 
 Run from the repository root with installed modeling dependencies, replacing the
 absolute example paths with real files:
@@ -103,9 +122,13 @@ python skills/3d-print-workflow/scripts/printability_gate.py inspect \
 The checker welds exactly coincident STL coordinates for topology analysis and
 reports input integrity, closed surfaces, edge and vertex manifoldness, winding,
 degenerate/duplicate faces, shared-edge components and fixed-orientation bounds.
-Read the returned normal/orientation method and limitations. It does not certify
-every self-intersection, complete wall/detail/connection minimum, contact or
-stability condition. Those remain `UNKNOWN` when not covered. Appearance,
+It also tests every face pair for self-intersection (floating-point predicates
+with a tolerance scaled to the model; touching unrelated faces count as an
+intersection) and, when the profile sets `base` thresholds, measures base
+contact area and centre-of-mass stability. Read the returned methods and
+limitations. It does not certify complete wall/detail/connection minimums,
+first-layer adhesion or stability under external loads. Those remain `UNKNOWN`
+when not covered. Appearance,
 slicer islands and support removal are separate categories and are not silently
 approved by geometric topology.
 
