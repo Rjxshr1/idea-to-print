@@ -24,7 +24,8 @@ def test_demo_passes_all_geometry_checks_without_slicer(tmp_path, monkeypatch, c
     assert job["workflow_v2"]["schema_version"] == 2
     printed = capsys.readouterr().out
     assert "Bambu Studio not found" in printed
-    assert "printability_gate.py inspect" in printed  # Commands are shown so they can be rerun by hand.
+    # Commands are shown so they can be rerun by hand (Windows paths are quoted).
+    assert "printability_gate.py" in printed and " inspect --mesh " in printed
 
 
 def test_demo_refuses_an_existing_directory(tmp_path):
