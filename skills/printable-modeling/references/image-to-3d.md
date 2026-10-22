@@ -33,8 +33,8 @@ python skills/printable-modeling/scripts/hunyuan31_api.py download --job jobs/ex
 ```
 
 `config-check` checks the SDK and credentials without submitting a job. Generation
-uses `Model=3.1`, `GenerateType=Geometry`, `FaceCount=1500000` and the
-`ap-guangzhou` region. The helper accepts one main image and, by default, up to
+uses `Model=3.1`, `GenerateType=Geometry` and the `ap-guangzhou` region; the
+face count follows the job's target size (see the API reference). The helper accepts one main image and, by default, up to
 two supplemental views. Supplemental images need a consistency review binding
 their paths and SHA256 hashes. Supported view slots and the review format are in
 the [API configuration reference](hunyuan31-api.md).

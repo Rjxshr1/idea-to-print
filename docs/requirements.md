@@ -33,7 +33,7 @@ python -m pip install -r requirements-modeling.txt
 python skills/printable-modeling/scripts/hunyuan31_api.py config-check
 ```
 
-`config-check` 检查 SDK 和配置，不提交生成任务。适配器提供提交、查询、下载和恢复命令，记录远端 JobId 与本地尝试状态。默认使用 `Model=3.1`、几何模式、1,500,000 面目标和 `ap-guangzhou` 区域；补充视图需要绑定图片哈希的一致性检查。初始化作业及完整参数见[官方 API 使用说明](../skills/printable-modeling/references/hunyuan31-api.md)。
+`config-check` 检查 SDK 和配置，不提交生成任务。适配器提供提交、查询、下载和恢复命令，记录远端 JobId 与本地尝试状态。默认使用 `Model=3.1`、几何模式和 `ap-guangzhou` 区域，面数按作业记录的打印尺寸自动选择（约 0.25 mm 一个三角形，10 万到 150 万面；未记录尺寸时用 150 万），也可用 `--face-count` 指定；补充视图需要绑定图片哈希的一致性检查。初始化作业及完整参数见[官方 API 使用说明](../skills/printable-modeling/references/hunyuan31-api.md)。
 
 公共 2.1 服务和 Studio 网页使用各自的接口与账号方式，不共用腾讯云 API 凭据。云端生成会将选定参考图上传到相应服务；仅接收图片或检查本地配置不会提交生成。各路线命令见[图片生成模型](../skills/printable-modeling/references/image-to-3d.md)。
 
