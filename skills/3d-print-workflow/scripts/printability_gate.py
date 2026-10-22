@@ -30,6 +30,12 @@ BASE_DEFAULTS = {"plane_tolerance_mm": 0.05, "min_contact_area_mm2": None,
                  "min_stability_margin_mm": None, "min_tip_angle_deg": None}
 MAX_CANDIDATE_PAIRS = 20_000_000
 QUERY_CHUNK = 50_000
+# sample_spacing_mm None = half the smallest configured thickness rule, at least MIN_AUTO_SPACING.
+THICKNESS_DEFAULTS = {"sample_spacing_mm": None, "max_thin_patch_area_mm2": 0.0, "max_samples": 5_000_000}
+THICKNESS_RULES = {"minimum_wall": "wall_min_mm", "minimum_detail": "detail_min_mm",
+                   "minimum_connection": "connection_min_mm"}
+MIN_AUTO_SPACING = 0.1  # mm; finer features are below any FDM nozzle.
+OPPOSING_ALIGNMENT = 0.5  # Exit face within 60 degrees of facing the sample point.
 
 
 def file_hash(path):
@@ -64,7 +70,7 @@ def validate_profile(profile):
     allowed = {"schema_version", "id", "description", "units", "required_checks",
                "build_volume_mm", "reserve_total_mm", "max_components",
                "degenerate_area_mm2", "expected_mesh_sha256", "rules", "regions",
-               "thickness_sampling", "base", "intersection_search", "process", "scope"}
+               "thickness_sampling", "thickness", "base", "intersection_search", "process", "scope"}
     unexpected = set(profile) - allowed
     if unexpected:
         raise ValueError(f"Unknown profile keys (no result overrides allowed): {sorted(unexpected)}")
@@ -124,6 +130,7 @@ def validate_profile(profile):
         validate_rules(region.get("rules", {}), "region rules")
     if len(set(region_ids)) != len(region_ids):
         raise ValueError("Region ids must be unique")
+    # Legacy key from the sampled wall-risk probe; still validated, no longer used.
     sampling = profile.get("thickness_sampling", {})
     if not isinstance(sampling, dict) or set(sampling) - {"enabled", "max_samples", "max_candidates"}:
         raise ValueError("Invalid thickness_sampling configuration")
@@ -133,6 +140,16 @@ def validate_profile(profile):
         value = sampling.get(key, default)
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= limit:
             raise ValueError(f"thickness_sampling.{key} must be 1..{limit}")
+    thickness = profile.get("thickness", {})
+    if not isinstance(thickness, dict) or set(thickness) - set(THICKNESS_DEFAULTS):
+        raise ValueError(f"thickness supports only {sorted(THICKNESS_DEFAULTS)}")
+    if thickness.get("sample_spacing_mm") is not None:
+        finite_number(thickness["sample_spacing_mm"], "thickness.sample_spacing_mm", strictly_positive=True)
+    if thickness.get("max_thin_patch_area_mm2") is not None:
+        finite_number(thickness["max_thin_patch_area_mm2"], "thickness.max_thin_patch_area_mm2")
+    samples = thickness.get("max_samples", THICKNESS_DEFAULTS["max_samples"])
+    if isinstance(samples, bool) or not isinstance(samples, int) or not 1 <= samples <= 50_000_000:
+        raise ValueError("thickness.max_samples must be 1..50000000")
     base = profile.get("base", {})
     if not isinstance(base, dict) or set(base) - set(BASE_DEFAULTS):
         raise ValueError(f"base supports only {sorted(BASE_DEFAULTS)}")
@@ -191,9 +208,9 @@ def establish_unknowns(report, profile):
     rules = {"global": profile.get("rules", {}), "regions": profile.get("regions", [])}
     for key, reason in {
         "self_intersection": "Not executed: requires a parsed mesh without degenerate faces and the rtree backend.",
-        "minimum_wall": "Surface sampling cannot certify the minimum thickness of every part of a mesh.",
-        "minimum_detail": "Semantic detail/relief size requires part identification and resolved toolpath checks.",
-        "minimum_connection": "A bounding box or ray thickness does not certify a load-bearing connection.",
+        "minimum_wall": "Not executed: requires a closed outward mesh without self-intersections, rtree and a wall_min_mm rule.",
+        "minimum_detail": "Not executed: requires a closed outward mesh without self-intersections, rtree and a detail_min_mm rule.",
+        "minimum_connection": "Not executed: requires a closed outward mesh without self-intersections, rtree and a connection_min_mm rule.",
         "base_contact": "Not executed: requires consistent outward normals and base.min_contact_area_mm2.",
         "stability": "Not executed: requires a single closed outward shell, a support footprint and a base stability threshold.",
         "appearance_fidelity": "Photo/design fidelity is an independent visual review; topology cannot certify it.",
@@ -204,70 +221,212 @@ def establish_unknowns(report, profile):
                   limitations=[reason])
 
 
-def thickness_risks(report, mesh, profile, np):
-    """Deterministic area-stratified centroid rays. A clear short ray is a risk, never global PASS."""
-    config = profile.get("thickness_sampling", {})
-    if not config.get("enabled", False):
-        return
-    check = report["checks"]["minimum_wall"]
-    if any(report["checks"][key]["status"] != "PASS" for key in
-           ("watertight", "edge_manifold", "winding", "degenerate_faces", "outward_normals")):
-        check["limitations"].append("Sampling skipped: closed, consistent outward geometry is required.")
-        return
-    cumulative = np.cumsum(mesh.area_faces)
-    face_ids = np.unique(np.searchsorted(cumulative, (np.arange(config.get("max_samples", 128)) + .5)
-                                        * cumulative[-1] / config.get("max_samples", 128)))
-    points = mesh.triangles_center[face_ids]
-    minimums = np.full(len(face_ids), profile.get("rules", {}).get("wall_min_mm") or np.nan)
-    region_names = [["global"] if np.isfinite(x) else [] for x in minimums]
+def thickness_settings(profile):
+    configured = {key: value for key, value in profile.get("thickness", {}).items() if value is not None}
+    return {**THICKNESS_DEFAULTS, **configured}
+
+
+def required_thickness(points, profile, rule, np):
+    """Per-sample minimum for one rule: a containing region overrides the global value;
+    overlapping regions use the strictest. NaN means no rule applies."""
+    required = np.full(len(points), np.nan)
+    global_value = profile.get("rules", {}).get(rule)
+    if global_value is not None:
+        required[:] = global_value
+    regional = np.full(len(points), np.nan)
+    names = [[] for _ in range(len(points))]
     for region in profile.get("regions", []):
-        threshold = region.get("rules", {}).get("wall_min_mm")
-        if threshold is None:
+        value = region.get("rules", {}).get(rule)
+        if value is None:
             continue
-        bounds = np.asarray(region["bounds_mm"])
-        included = np.all((points >= bounds[0]) & (points <= bounds[1]), axis=1)
-        minimums[included] = np.fmax(minimums[included], threshold)
-        for index in np.flatnonzero(included):
-            region_names[index].append(region["id"])
-    eligible = np.flatnonzero(np.isfinite(minimums))
-    check["method"] = "fixed area-stratified face centroids; inward normal first-hit rays; candidate-only coverage"
-    check["measured"] = {"sample_faces": len(face_ids), "samples_with_wall_rule": len(eligible), "candidates": []}
-    check["limitations"] += [
-        "Unselected faces and in-plane/oblique thin features remain untested; no-risk result is UNKNOWN.",
-        "Ray distance is a local opposing-surface measurement, not structural strength or the global medial thickness.",
-        "Self-intersections remain separately UNKNOWN; a short ray is a conservative review/repair candidate.",
-        "Region selectors use face centroids in unchanged mesh coordinates; overlapping rules use the strictest minimum.",
+        bounds = np.asarray(region["bounds_mm"], dtype=float)
+        inside = np.flatnonzero(np.all((points >= bounds[0]) & (points <= bounds[1]), axis=1))
+        regional[inside] = np.fmax(regional[inside], value)
+        for index in inside:
+            names[index].append(region["id"])
+    overridden = np.isfinite(regional)
+    required[overridden] = regional[overridden]
+    return required, names
+
+
+def surface_samples(mesh, spacing, limit, np):
+    """Split every face at the midpoint of its longest edge until all pieces are at most
+    `spacing` across, and sample each piece at its centroid. Every surface point then lies
+    within `spacing` of a sample, and the sample count grows with area, not edge length."""
+    pieces = np.asarray(mesh.triangles, dtype=float)
+    owners = np.arange(len(pieces))
+    done_pieces, done_owners = [], []
+    while len(pieces):
+        lengths = np.linalg.norm(pieces - np.roll(pieces, -1, axis=1), axis=2)  # edge i: vertex i -> i+1
+        small = lengths.max(axis=1) <= spacing
+        done_pieces.append(pieces[small])
+        done_owners.append(owners[small])
+        pieces, owners, lengths = pieces[~small], owners[~small], lengths[~small]
+        if sum(len(x) for x in done_pieces) + 2 * len(pieces) > limit:
+            return None, sum(len(x) for x in done_pieces) + 2 * len(pieces)
+        if not len(pieces):
+            break
+        edge = lengths.argmax(axis=1)
+        rows = np.arange(len(pieces))
+        a, b, c = pieces[rows, edge], pieces[rows, (edge + 1) % 3], pieces[rows, (edge + 2) % 3]
+        middle = (a + b) / 2
+        pieces = np.concatenate((np.stack((a, middle, c), axis=1), np.stack((middle, b, c), axis=1)))
+        owners = np.concatenate((owners, owners))
+    pieces, owners = np.concatenate(done_pieces), np.concatenate(done_owners)
+    cross = np.cross(pieces[:, 1] - pieces[:, 0], pieces[:, 2] - pieces[:, 0])
+    return (pieces.mean(axis=1), owners, np.linalg.norm(cross, axis=1) / 2), len(pieces)
+
+
+def opposing_distances(mesh, points, faces, lengths, np, trimesh):
+    """Distance from each sample along its inward normal to the first exit face within
+    `lengths`, and that exit face's alignment with the ray. inf when nothing is hit."""
+    triangles = mesh.triangles
+    normals = mesh.face_normals
+    directions = -normals[faces]
+    eps = max(float(np.max(mesh.extents)) * 1e-9, 1e-12)
+    ends = points + directions * lengths[:, None]
+    low, high = np.minimum(points, ends) - eps, np.maximum(points, ends) + eps
+    tree = trimesh.util.bounds_tree(np.column_stack((triangles.min(axis=1) - eps, triangles.max(axis=1) + eps)))
+    best = np.full(len(points), np.inf)
+    best_face = np.full(len(points), -1, dtype=np.int64)
+    for start in range(0, len(points), QUERY_CHUNK):
+        stop = min(start + QUERY_CHUNK, len(points))
+        ids, counts = tree.intersection_v(low[start:stop], high[start:stop])
+        sample = np.repeat(np.arange(start, stop), np.asarray(counts, dtype=np.int64))
+        face = np.asarray(ids, dtype=np.int64)
+        # A closed outward mesh without self-intersections is exited before it is re-entered.
+        keep = (face != faces[sample]) & (np.einsum("ij,ij->i", normals[face], directions[sample]) > 0)
+        sample, face = sample[keep], face[keep]
+        if not len(sample):
+            continue
+        # Moller-Trumbore ray/triangle distance.
+        a, b, c = triangles[face, 0], triangles[face, 1], triangles[face, 2]
+        d, origin = directions[sample], points[sample]
+        e1, e2 = b - a, c - a
+        p = np.cross(d, e2)
+        det = np.einsum("ij,ij->i", e1, p)
+        inverse = 1 / np.where(np.abs(det) > 1e-300, det, 1)
+        s = origin - a
+        u = np.einsum("ij,ij->i", s, p) * inverse
+        q = np.cross(s, e1)
+        v = np.einsum("ij,ij->i", d, q) * inverse
+        t = np.einsum("ij,ij->i", e2, q) * inverse
+        tol = 1e-9
+        hit = ((np.abs(det) > 1e-300) & (u >= -tol) & (v >= -tol) & (u + v <= 1 + tol)
+               & (t > eps * 4) & (t <= lengths[sample] + eps))
+        sample, face, t = sample[hit], face[hit], t[hit]
+        order = np.lexsort((t, sample))
+        sample, face, t = sample[order], face[order], t[order]
+        first = np.ones(len(sample), dtype=bool)
+        first[1:] = sample[1:] != sample[:-1]
+        sample, face, t = sample[first], face[first], t[first]
+        closer = t < best[sample]
+        best[sample[closer]] = t[closer]
+        best_face[sample[closer]] = face[closer]
+    alignment = np.zeros(len(points))
+    found = best_face >= 0
+    alignment[found] = np.einsum("ij,ij->i", normals[best_face[found]], directions[found])
+    return best, best_face, alignment
+
+
+def thin_patches(mesh, faces, areas, thin, distances, points, np):
+    """Group thin samples into patches of edge-connected faces; return patches largest first."""
+    if not thin.any():
+        return []
+    graph = importlib.import_module("scipy.sparse.csgraph")
+    sparse = importlib.import_module("scipy.sparse")
+    thin_faces = np.unique(faces[thin])
+    index = np.full(len(mesh.faces), -1)
+    index[thin_faces] = np.arange(len(thin_faces))
+    pairs = mesh.face_adjacency
+    linked = (index[pairs[:, 0]] >= 0) & (index[pairs[:, 1]] >= 0)
+    rows, cols = index[pairs[linked, 0]], index[pairs[linked, 1]]
+    adjacency = sparse.coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(len(thin_faces),) * 2)
+    _, labels = graph.connected_components(adjacency, directed=False)
+    label = labels[index[faces[thin]]]
+    patch_area = np.bincount(label, weights=areas[thin])
+    patches = []
+    thin_ids = np.flatnonzero(thin)
+    for patch in np.argsort(-patch_area):
+        members = thin_ids[label == patch]
+        worst = members[np.argmin(distances[members])]
+        patches.append({"area_mm2": float(patch_area[patch]), "samples": int(len(members)),
+                        "faces": int(len(np.unique(faces[members]))),
+                        "min_thickness_mm": float(distances[worst]), "at_mm": points[worst].tolist()})
+    return patches
+
+
+def thickness_checks(report, mesh, profile, np, trimesh):
+    """Opposing-surface thickness on every face, compared with wall/detail/connection rules."""
+    settings = thickness_settings(profile)
+    keys = list(THICKNESS_RULES)
+    method = ("samples on every face at the stated spacing; from each, the distance along the inward normal to the "
+              "first exit face, counted as thickness when that face is within 60 degrees of facing back")
+    common = [
+        "Every surface point lies within sample_spacing_mm of a sample; a thin region narrower than that spacing "
+        "in every direction can be missed.",
+        "Thickness is measured along the surface normal. Where the first exit face is more than 60 degrees from "
+        "facing back (inside corners, steps), the sample does not measure a wall.",
+        "Region rules override the global rule inside their bounding boxes (strictest of overlapping regions); "
+        "regions select samples in unchanged mesh coordinates.",
+        "Geometric thickness only; strength, layer adhesion and print orientation effects are not modelled.",
     ]
-    if not len(eligible):
-        check["limitations"].append("No eligible sampled face has a wall_min_mm rule.")
+    preconditions = ("watertight", "winding", "outward_normals", "degenerate_faces", "self_intersection")
+    blocked = [key for key in preconditions if report["checks"][key]["status"] != "PASS"]
+    if blocked or importlib.util.find_spec("rtree") is None:
+        reason = (f"Preconditions not met: {', '.join(blocked)} must PASS." if blocked
+                  else "Optional rtree backend is not installed (requirements-modeling.txt).")
+        for key in keys:
+            set_check(report, key, "UNKNOWN", method, thresholds={"rule": THICKNESS_RULES[key]},
+                      limitations=[reason] + common)
         return
-    directions = -mesh.face_normals[face_ids[eligible]]
-    epsilon = max(float(np.max(mesh.extents)) * 1e-8, 1e-7)
-    try:
-        # One bounded ray query; backend exceptions explicitly leave coverage UNKNOWN.
-        locations, ray_ids, hit_faces = mesh.ray.intersects_location(
-            points[eligible] + directions * epsilon, directions, multiple_hits=False)
-    except Exception as exc:
-        check["limitations"].append(f"Ray backend unavailable/failed: {type(exc).__name__}: {exc}")
+    configured = [value for value in [profile.get("rules", {}).get(rule) for rule in THICKNESS_RULES.values()]
+                  + [region.get("rules", {}).get(rule) for region in profile.get("regions", [])
+                     for rule in THICKNESS_RULES.values()] if value is not None]
+    if not configured:
+        for key in keys:
+            set_check(report, key, "UNKNOWN", method, thresholds={"rule": THICKNESS_RULES[key]},
+                      limitations=[f"No {THICKNESS_RULES[key]} rule is configured for this part."] + common)
         return
-    distances = np.linalg.norm(locations - points[eligible][ray_ids], axis=1)
-    alignment = np.einsum("ij,ij->i", mesh.face_normals[hit_faces], directions[ray_ids])
-    candidates = []
-    for hit_index in np.flatnonzero((distances < minimums[eligible][ray_ids] - epsilon * 4)
-                                  & (distances > epsilon * 4) & (alignment > .5)):
-        sample_index = int(eligible[ray_ids[hit_index]])
-        if int(hit_faces[hit_index]) == int(face_ids[sample_index]):
+    spacing = settings["sample_spacing_mm"] or max(min(configured) / 2, MIN_AUTO_SPACING)
+    tolerance = settings["max_thin_patch_area_mm2"]
+    sampled, total = surface_samples(mesh, spacing, settings["max_samples"], np)
+    if sampled is None:
+        for key in keys:
+            set_check(report, key, "UNKNOWN", method, {"samples_needed": total},
+                      {"rule": THICKNESS_RULES[key], "sample_spacing_mm": spacing, "max_samples": settings["max_samples"]},
+                      ["Sample budget exceeded; raise thickness.max_samples or sample_spacing_mm, or simplify the mesh."] + common)
+        return
+    points, faces, areas = sampled
+    requirements = {key: required_thickness(points, profile, THICKNESS_RULES[key], np) for key in keys}
+    lengths = np.fmax.reduce([requirements[key][0] for key in keys])
+    lengths = np.where(np.isfinite(lengths), lengths, 0.0)
+    distances, _, alignment = opposing_distances(mesh, points, faces, lengths, np, trimesh)
+    measured_wall = np.where(alignment > OPPOSING_ALIGNMENT, distances, np.inf)
+    for key in keys:
+        required, names = requirements[key]
+        ruled = np.isfinite(required)
+        thresholds = {"rule": THICKNESS_RULES[key], "global_mm": profile.get("rules", {}).get(THICKNESS_RULES[key]),
+                      "sample_spacing_mm": spacing, "max_thin_patch_area_mm2": tolerance}
+        if not ruled.any():
+            set_check(report, key, "UNKNOWN", method, {"samples": int(len(points))}, thresholds,
+                      [f"No {THICKNESS_RULES[key]} rule applies to any part of this mesh."] + common)
             continue
-        candidates.append({"face_id": int(face_ids[sample_index]), "opposing_face_id": int(hit_faces[hit_index]),
-                           "point_mm": points[sample_index].tolist(), "ray_distance_mm": float(distances[hit_index]),
-                           "required_wall_mm": float(minimums[sample_index]), "regions": region_names[sample_index]})
-    candidates.sort(key=lambda item: (item["ray_distance_mm"], item["face_id"]))
-    check["measured"].update(rays_with_hit=len(ray_ids), candidate_count=len(candidates),
-                             candidates=candidates[:config.get("max_candidates", 32)],
-                             numeric_offset_mm=epsilon,
-                             minimum_observed_ray_mm=float(distances.min()) if len(distances) else None)
-    if candidates:
-        check["status"] = "FAIL"
+        thin = ruled & (measured_wall < required)
+        patches = thin_patches(mesh, faces, areas, thin, measured_wall, points, np)
+        regions_hit = sorted({name for index in np.flatnonzero(thin) for name in names[index]})
+        largest = patches[0]["area_mm2"] if patches else 0.0
+        finite = measured_wall[ruled][np.isfinite(measured_wall[ruled])]
+        measured = {"samples": int(len(points)), "samples_with_rule": int(ruled.sum()),
+                    "thin_samples": int(thin.sum()), "thin_area_mm2": float(areas[thin].sum()),
+                    "thin_patches": len(patches), "largest_thin_patch_mm2": largest,
+                    "patches": patches[:32], "regions_with_thin_samples": regions_hit,
+                    # Only distances shorter than the rule are searched, so a missing value means thicker.
+                    "min_measured_thickness_mm": float(finite.min()) if len(finite) else None}
+        limitations = list(common)
+        if ruled.sum() < len(points):
+            limitations.insert(0, f"{int(len(points) - ruled.sum())} samples have no {THICKNESS_RULES[key]} rule and are not checked.")
+        set_check(report, key, "FAIL" if largest > tolerance else "PASS", method, measured, thresholds, limitations)
 
 
 def base_settings(profile):
@@ -702,7 +861,7 @@ def inspect(mesh_path, profile, profile_path=None):
     footprint = base_contact(report, mesh, profile, np)
     stability(report, mesh, profile, np, footprint)
     self_intersection(report, mesh, profile, np, trimesh)
-    thickness_risks(report, mesh, profile, np)
+    thickness_checks(report, mesh, profile, np, trimesh)
     if file_hash(path) != before:
         set_check(report, "input_integrity", "FAIL", "SHA256 before and after inspection", limitations=["Input changed during inspection; results are invalid."])
     return finish(report)

@@ -76,19 +76,39 @@ settings or universal safety minima.
 - `rules` contains `wall_min_mm`, `detail_min_mm` and `connection_min_mm`.
   Relate these to the actual line width, layer height, material, root length and
   handling. A surface relief and a cantilever need different targets.
-- `regions` may override rules within millimetre bounding boxes in the STL's
-  coordinate system. Update those regions after changing scale or orientation.
-  For example, a local tail/root rule may be stronger than the body's relief.
+- `regions` override the global rules within millimetre bounding boxes in the
+  STL's coordinate system, in either direction; where regions overlap, the
+  strictest applies. Update those regions after changing scale or orientation.
+  For example, a tail root may need a stronger connection rule than the body,
+  and a surface relief may be allowed a smaller wall than the body.
   A bounding box is an explicitly chosen scope, not automatic anatomical labeling.
 - `required_checks` declares the standalone gate's diagnostic scope. Keep a
   scope/rationale when selecting a narrower inspection. The full sculpture
   ledger still requires its fixed 16 geometric checks; shrinking a profile
   cannot remove those requirements or produce a full-workflow pass. Measured
   failures remain failures even when excluded from the diagnostic scope.
-- `thickness_sampling` is optional. A short normal-ray distance is a warning or
-  detected risk under that method. Even all samples above threshold leave the
-  complete minimum wall measurement `UNKNOWN`; this is not a whole-surface
-  thickness certificate.
+- `thickness` controls the wall, detail and connection measurement. All three
+  share one measurement: every face is split until each piece is at most
+  `sample_spacing_mm` across (default: half the smallest configured rule, at
+  least 0.1 mm), and from each piece's centre the gate measures the distance
+  along the inward normal to the first exit face, counted as a wall when that
+  face is within 60 degrees of facing back. So every surface point lies within
+  the spacing of a sample; a thin region narrower than that in every direction
+  can be missed. The checks differ only in their rule: `wall_min_mm` for
+  general walls, `detail_min_mm` for fine relief and `connection_min_mm` for
+  roots and necks (usually set in `regions`; a global connection rule applies
+  everywhere). A rule that is not configured anywhere keeps its check `UNKNOWN`.
+- Thin samples are grouped into patches of connected faces.
+  `thickness.max_thin_patch_area_mm2` (default 0) is the largest thin patch
+  allowed. Any pointed tip, such as an ear, claw or horn, gets thinner than
+  every rule near its apex. A 14-degree cone tip has about 4 mm² thinner than
+  1.2 mm, so a sculpture normally needs either a small patch tolerance (a few
+  mm²) or relaxed region rules at its tips. The report lists each patch with its
+  area, thinnest point and location, so the tolerance can be judged from the
+  actual model. `thickness.max_samples` (default 5,000,000) bounds the work;
+  exceeding it gives `UNKNOWN`. Expect about 25 s for 330k faces and roughly
+  two minutes for 1.5M faces on a laptop CPU. The legacy `thickness_sampling`
+  key is still accepted but no longer used.
 - `base` sets the contact and stability targets for this part in its fixed
   print orientation. `plane_tolerance_mm` (default 0.05) is the band above the
   lowest point treated as the bed plane. `min_contact_area_mm2` is compared
@@ -126,9 +146,10 @@ It also tests every face pair for self-intersection (floating-point predicates
 with a tolerance scaled to the model; touching unrelated faces count as an
 intersection) and, when the profile sets `base` thresholds, measures base
 contact area and centre-of-mass stability. Read the returned methods and
-limitations. It does not certify complete wall/detail/connection minimums,
-first-layer adhesion or stability under external loads. Those remain `UNKNOWN`
-when not covered. Appearance,
+limitations. When the profile sets thickness rules, it also measures wall,
+detail and connection thickness on every face at the stated sample spacing.
+It does not certify strength, first-layer adhesion or stability under external
+loads. Checks without a configured threshold remain `UNKNOWN`. Appearance,
 slicer islands and support removal are separate categories and are not silently
 approved by geometric topology.
 
@@ -136,8 +157,9 @@ Each check includes status, required flag, method, measurements, thresholds and
 limitations. `overall_scope=geometry` aggregates geometry only: any geometric
 failure takes precedence; otherwise an unknown required geometric check yields
 `UNKNOWN`. A geometry `PASS` does not assert all optional checks passed or that
-the workflow is ready. The full example deliberately includes checks that this
-tool cannot yet complete automatically. The CLI exits 0 for PASS, 2 for FAIL
+the workflow is ready. The full example leaves the base thresholds unset, so
+its base contact and stability results stay `UNKNOWN` until you set them for
+the actual part. The CLI exits 0 for PASS, 2 for FAIL
 and 3 for UNKNOWN; an UNKNOWN report was still produced successfully. Optional
 `expected_mesh_sha256` in the profile can bind the intended mesh identity.
 

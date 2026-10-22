@@ -153,10 +153,12 @@ def test_real_geometry_check_binds_profile_and_preserves_unknown(ledger, job):
     revision = read(job)['refinement']['revisions']['v1']
     report = json.loads(Path(revision['geometry']['report']['path']).read_text())
     assert report['checks']['watertight']['status'] == 'PASS'
-    assert report['checks']['minimum_wall']['status'] == 'UNKNOWN'
+    # The 1 mm fixture is thinner than the example 1.2 mm wall rule; stability has no threshold.
+    assert report['checks']['minimum_wall']['status'] == 'FAIL'
+    assert report['checks']['stability']['status'] == 'UNKNOWN'
     assert report['mesh']['sha256'] == ledger.sha(job / 'model.stl')
     assert report['profile']['sha256'] == ledger.sha(profile)
-    assert ledger.status(read(job), 'v1')['stages']['geometry']['status'] == 'UNKNOWN'
+    assert ledger.status(read(job), 'v1')['stages']['geometry']['status'] == 'FAIL'
     changed = json.loads(profile.read_text())
     changed['build_volume_mm'] = [0.5, 0.5, 0.5]
     changed['reserve_total_mm'] = [0, 0, 0]
