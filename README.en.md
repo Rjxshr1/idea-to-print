@@ -70,6 +70,16 @@ Use the directory recognized by your agent, such as `~/.codex/skills`. The insta
 
 Image generation and desktop control come from the agent host. The official Hunyuan API requires Tencent Cloud credentials and available quota. Blender and slicing run locally; cloud image-to-3D does not use a local inference GPU.
 
+## Try it offline
+
+With `requirements.txt` and `requirements-modeling.txt` installed, run the whole flow offline with no account, network or printer:
+
+```bash
+python skills/idea-to-print/scripts/demo.py --out demo
+```
+
+It creates a job from a synthetic reference image, builds a cat figurine on a round base, runs all 16 geometry checks and the mesh audit, and prints each real command it runs. With a local Bambu Studio (Windows or macOS), `--slice` also flattens the presets and slices offline; `--printer` picks `a1mini`, `a1`, `p1s` or `x1c`. Nothing is sent to a printer.
+
 ## Command-line entry points
 
 Create an image job and inspect its next action:
@@ -85,6 +95,36 @@ python skills/idea-to-print/scripts/workflow_v2.py status --job jobs/my-sculptur
 
 # Check API configuration without requesting generation
 python skills/printable-modeling/scripts/hunyuan31_api.py config-check
+```
+
+Check a model's geometry (copy `printability-profile.example.json` and set the thresholds for the part); exit code 0=PASS, 2=FAIL, 3=UNKNOWN:
+
+```bash
+python skills/3d-print-workflow/scripts/printability_gate.py inspect \
+  --mesh jobs/my-sculpture/outputs/model-v1.stl \
+  --profile jobs/my-sculpture/work/printability-profile.json \
+  --out jobs/my-sculpture/work/geometry-v1.json
+```
+
+Slice offline (A1 mini on macOS shown; on Windows the presets are under the Studio install's `resources/profiles/BBL`):
+
+```bash
+python skills/3d-print-workflow/scripts/slice_pipeline.py resolve-profiles \
+  --out jobs/my-sculpture/work/profiles \
+  --search /Applications/BambuStudio.app/Contents/Resources/profiles/BBL \
+  --machine "Bambu Lab A1 mini 0.4 nozzle" --process "0.20mm Standard @BBL A1M" \
+  --filament "Bambu PLA Basic @BBL A1M"
+
+python skills/3d-print-workflow/scripts/slice_pipeline.py prepare \
+  --mesh jobs/my-sculpture/outputs/model-v1.stl --out jobs/my-sculpture/work/slice-v1 \
+  --machine jobs/my-sculpture/work/profiles/machine.json \
+  --process jobs/my-sculpture/work/profiles/process.json \
+  --filament jobs/my-sculpture/work/profiles/filament.json \
+  --slicer /Applications/BambuStudio.app/Contents/MacOS/BambuStudio \
+  --slicer-version 02.08.02.61 --bed 180 180 180
+
+python skills/3d-print-workflow/scripts/run_bambu_slice.py --launch jobs/my-sculpture/work/slice-v1/launch.json
+python skills/3d-print-workflow/scripts/slice_pipeline.py collect --run jobs/my-sculpture/work/slice-v1
 ```
 
 After reference review, the agent submits generation, records actual results and continues the next stage. A possible submission without JobId stops automatic resubmission. Known jobs resume querying; download failures resume downloading.
