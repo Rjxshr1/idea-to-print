@@ -92,12 +92,79 @@ def position(mesh_path, target, bed, reserve=0.0):
             'scope': 'Fixed orientation object bounds only; support/brim envelope requires actual slice review.'}
 
 
+PROFILE_KINDS = ('machine', 'process', 'filament')
+
+
+def _preset_index(directories, kind):
+    """Map preset name -> (path, data) for one kind across the given directories, first wins."""
+    index = {}
+    for directory in directories:
+        directory = Path(directory)
+        candidates = sorted((directory / kind).rglob('*.json')) if (directory / kind).is_dir() else sorted(directory.rglob('*.json'))
+        for path in candidates:
+            try:
+                data = json.loads(path.read_text(encoding='utf-8-sig'))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict) and isinstance(data.get('name'), str):
+                index.setdefault(data['name'], (path, data))
+    return index
+
+
+def resolve_profile(selected, kind, directories):
+    """Flatten a Studio preset's `inherits` chain. The CLI does not resolve it, and an
+    unresolved preset silently slices with missing keys (zero material, wrong times)."""
+    index = _preset_index(directories, kind)
+    path = Path(selected)
+    if path.is_file():
+        data = json.loads(path.read_text(encoding='utf-8-sig'))
+    elif selected in index:
+        path, data = index[selected]
+    else:
+        raise ValueError(f'{kind} preset not found: {selected}')
+    chain, seen = [(path, data)], {data.get('name')}
+    while chain[-1][1].get('inherits'):
+        parent = chain[-1][1]['inherits']
+        if parent in seen:
+            raise ValueError(f'{kind} preset inheritance loop at {parent}')
+        if parent not in index:
+            raise ValueError(f'{kind} parent preset not found: {parent}')
+        seen.add(parent)
+        chain.append(index[parent])
+    flat = {}
+    for _, layer in reversed(chain):
+        flat.update(layer)
+    flat.pop('inherits', None)
+    flat['name'] = data.get('name', flat.get('name'))
+    return flat, [{'name': layer.get('name'), **artifact(source)} for source, layer in chain]
+
+
+def resolve_profiles(out, selections, directories):
+    out = Path(out).resolve()
+    if out.exists():
+        raise ValueError('Profile output directory already exists; preserve it or choose another')
+    resolved = {kind: resolve_profile(selections[kind], kind, directories) for kind in PROFILE_KINDS}
+    out.mkdir(parents=True)
+    record = {'schema_version': 1, 'search_directories': [str(Path(d).resolve()) for d in directories], 'profiles': {}}
+    for kind, (flat, chain) in resolved.items():
+        target = out / (kind + '.json')
+        target.write_text(json.dumps(flat, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        record['profiles'][kind] = {'name': flat.get('name'), 'resolved': artifact(target), 'inheritance_chain': chain}
+    save(out / 'profile-resolution.json', record)
+    return record
+
+
 def prepare(mesh, out, machine, process, filament, slicer, version, bed, reserve=0.0, distribution=None):
     out = Path(out).resolve()
     if out.exists():
         raise ValueError('Slice run already exists; preserve it or collect its result')
     source = artifact(mesh)
     originals = {key: artifact(path) for key, path in [('machine', machine), ('process', process), ('filament', filament)]}
+    for key, info in originals.items():
+        data = json.loads(Path(info['path']).read_text(encoding='utf-8-sig'))
+        if isinstance(data, dict) and data.get('inherits'):
+            raise ValueError(f'{key} profile inherits {data["inherits"]!r}; the slicer CLI does not resolve '
+                             'inheritance. Flatten it first with: slice_pipeline.py resolve-profiles')
     out.mkdir(parents=True)
     settings = {}
     for key, info in originals.items():
@@ -203,6 +270,12 @@ def main(argv=None):
     p.add_argument('--bed', nargs=3, type=float, required=True)
     p.add_argument('--reserve-total', type=float, default=0)
     p.add_argument('--windows-distribution')
+    p = sub.add_parser('resolve-profiles', help='Flatten Studio preset inheritance into standalone profiles')
+    p.add_argument('--out', required=True)
+    p.add_argument('--search', action='append', required=True,
+                   help='Preset directory, e.g. the Studio vendor folder (profiles/BBL) or a user preset folder; repeatable, first match wins')
+    for kind in PROFILE_KINDS:
+        p.add_argument('--' + kind, required=True, help='Preset name or JSON file')
     sub.add_parser('collect').add_argument('--run', required=True)
     p = sub.add_parser('preview')
     p.add_argument('--run', required=True)
@@ -212,6 +285,8 @@ def main(argv=None):
         if args.command == 'prepare':
             result = prepare(args.mesh, args.out, args.machine, args.process, args.filament,
                              args.slicer, args.slicer_version, args.bed, args.reserve_total, args.windows_distribution)
+        elif args.command == 'resolve-profiles':
+            result = resolve_profiles(args.out, {kind: getattr(args, kind) for kind in PROFILE_KINDS}, args.search)
         elif args.command == 'preview':
             result = preview(args.run, args.output)
         else:

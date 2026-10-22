@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Windows-only bounded launcher for slice_pipeline's immutable request.
+"""Bounded Windows/macOS launcher for slice_pipeline's immutable request.
 
 Starts only Bambu Studio's offline slice CLI, never a printer command. Execute
-with the Windows Python runtime because Bambu Studio is a Windows application.
+with the host's native Python (Windows Python for a Windows install, macOS
+Python for /Applications/BambuStudio.app).
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import plistlib
 import subprocess
 import sys
 
@@ -20,6 +22,27 @@ import sys
 def sha(path):
     with Path(path).open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def bundle_version(path):
+    """CFBundleShortVersionString of the .app that contains the macOS executable."""
+    for parent in Path(path).resolve().parents:
+        if parent.suffix == '.app':
+            info = parent / 'Contents' / 'Info.plist'
+            with info.open('rb') as stream:
+                version = plistlib.load(stream).get('CFBundleShortVersionString')
+            if not version:
+                raise ValueError('Missing slicer bundle version')
+            return version
+    raise ValueError('Slicer executable is not inside a macOS .app bundle')
+
+
+def installed_version(path):
+    if os.name == 'nt':
+        return file_version(path)
+    if sys.platform == 'darwin':
+        return bundle_version(path)
+    raise ValueError('Run this host launcher with Windows or macOS Python')
 
 
 def file_version(path):
@@ -64,8 +87,8 @@ def claim_execution(root, intent):
 
 
 def run(launch_file, timeout=1800):
-    if os.name != 'nt':
-        raise ValueError('Run this host launcher with Windows Python')
+    if os.name != 'nt' and sys.platform != 'darwin':
+        raise ValueError('Run this host launcher with Windows or macOS Python')
     launch_file = Path(launch_file).resolve(strict=True)
     request = json.loads(launch_file.read_text(encoding='utf-8'))
     root = launch_file.parent
@@ -80,7 +103,7 @@ def run(launch_file, timeout=1800):
     if request.get('printer_actions') != 'none':
         raise ValueError('Only offline slicing requests are supported')
     expected = tuple(int(x) for x in request['slicer_version'].split('.'))
-    actual = file_version(request['executable'])
+    actual = installed_version(request['executable'])
     if tuple(int(x) for x in actual.split('.')) != expected:
         raise ValueError('Installed slicer version differs from prepared request')
     args = request['arguments']
@@ -90,13 +113,15 @@ def run(launch_file, timeout=1800):
               'slicer_version': request['slicer_version'], 'slicer_sha256': sha(request['executable']),
               'host_pid': os.getpid(), 'printer_actions': 'none'}
     claim_execution(root, intent)
-    startup = subprocess.STARTUPINFO()
-    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startup.wShowWindow = 0
+    options = {}
+    if os.name == 'nt':
+        startup = subprocess.STARTUPINFO()
+        startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startup.wShowWindow = 0
+        options = {'startupinfo': startup, 'creationflags': subprocess.CREATE_NO_WINDOW}
     with (root / 'stdout.log').open('wb') as stdout, (root / 'stderr.log').open('wb') as stderr:
         process = subprocess.Popen([request['executable'], *args], cwd=request['working_directory'],
-                                   stdout=stdout, stderr=stderr, startupinfo=startup,
-                                   creationflags=subprocess.CREATE_NO_WINDOW)
+                                   stdout=stdout, stderr=stderr, **options)
         intent['slicer_pid'] = process.pid
         save(root / 'execution-intent.json', intent)
         try:

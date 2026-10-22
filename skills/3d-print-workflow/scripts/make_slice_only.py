@@ -2,7 +2,7 @@
 """Convert a verified Bambu CLI single-plate 3MF to the sliced-file layout.
 
 Offline only: this does not slice, assess machine compatibility, upload, or print.
-Supported producer: BambuStudio-02.07.01.62, core/production XML namespaces,
+Supported producers: BambuStudio-02.07.01.62 and 02.08.02.61, core/production XML namespaces,
 external object_N.model geometry, exactly plate_1, no assembly items. Other
 layouts fail closed. Original source, G-code, settings, warnings and all entries
 outside the two edited XML files and explicitly removed geometry are preserved.
@@ -27,7 +27,8 @@ PROD = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
 REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 MODEL_REL = "http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"
 BBL = "http://schemas.bambulab.com/package/2021"
-PRODUCER = "BambuStudio-02.07.01.62"
+# Layouts checked against real CLI packages from these versions; others fail closed.
+PRODUCERS = ("BambuStudio-02.07.01.62", "BambuStudio-02.08.02.61")
 MODEL = "3D/3dmodel.model"
 SETTINGS = "Metadata/model_settings.config"
 GEOM_RELS = "3D/_rels/3dmodel.model.rels"
@@ -121,7 +122,8 @@ def validate(entries):
     require(model.tag == f"{{{CORE}}}model" and model.get("unit") == "millimeter", "Unsupported model root/unit")
     require(model.get("requiredextensions") == "p", "Unsupported required extensions")
     applications = [m.text for m in model.findall(f"{{{CORE}}}metadata") if m.get("name") == "Application"]
-    require(applications == [PRODUCER], f"Unsupported producer; verified only {PRODUCER}")
+    require(len(applications) == 1 and applications[0] in PRODUCERS,
+            f"Unsupported producer {applications}; verified only {', '.join(PRODUCERS)}")
     require(all(c.tag in {f"{{{CORE}}}metadata", f"{{{CORE}}}resources", f"{{{CORE}}}build"} for c in model), "Unknown root model children")
     resources = one(model, f"{{{CORE}}}resources", "model resources")
     build = one(model, f"{{{CORE}}}build", "model build")
@@ -190,7 +192,7 @@ def validate(entries):
         require(isinstance(json.loads(entries[name]), dict), f"Expected JSON object: {name}")
     if "Metadata/filament_sequence.json" in entries:
         require(set(json.loads(entries["Metadata/filament_sequence.json"])) == {"plate_1"}, "Unsupported filament sequence plates")
-    return geometry, digest
+    return geometry, digest, applications[0]
 
 
 def convert_xml(entries):
@@ -245,7 +247,7 @@ def convert(source, output, report):
         require(all(not i.is_dir() and not i.flag_bits & 1 and i.compress_type in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED} for i in infos), "Unsupported ZIP directory/encryption/compression")
         entries = {i.filename: archive.read(i) for i in infos}  # validates ZIP CRCs
         archive_comment = archive.comment
-    removed, gcode_md5 = validate(entries)
+    removed, gcode_md5, producer = validate(entries)
     removed = removed | {GEOM_RELS}
     edited = convert_xml(entries)
     buffer = io.BytesIO()
@@ -263,7 +265,7 @@ def convert(source, output, report):
     payload = buffer.getvalue()
     result = {
         "created_at": datetime.now(timezone.utc).isoformat(), "status": "verified_offline",
-        "supported_producer": PRODUCER, "plate": 1, "source": str(source), "output": str(output),
+        "supported_producer": producer, "plate": 1, "source": str(source), "output": str(output),
         "source_sha256": source_sha, "output_sha256": hashlib.sha256(payload).hexdigest(),
         "gcode_md5": gcode_md5, "removed_geometry": sorted(removed),
         "edited_xml_entries": sorted(EDITED), "byte_identical_entries": unchanged,

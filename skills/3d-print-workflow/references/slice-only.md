@@ -1,6 +1,6 @@
 # Preserve a checked slice when opening Studio
 
-`scripts/make_slice_only.py` prepares a sliced-file container for opening existing Bambu toolpaths without re-slicing editable geometry. It supports Bambu Studio 02.07.01.62 single-plate CLI packages with the layout specified below.
+`scripts/make_slice_only.py` prepares a sliced-file container for opening existing Bambu toolpaths without re-slicing editable geometry. It supports Bambu Studio 02.07.01.62 and 02.08.02.61 single-plate CLI packages with the layout specified below.
 
 Prefer the official **export plate sliced file** command when available. The helper removes editable geometry while preserving G-code, settings and warnings.
 
@@ -10,7 +10,7 @@ From the repository root:
 python skills/3d-print-workflow/scripts/make_slice_only.py --source jobs/example/outputs/job-ready.gcode.3mf --output jobs/example/outputs/job-dispatch.gcode.3mf --report jobs/example/work/slice-only.json
 ```
 
-Supported format: producer `BambuStudio-02.07.01.62`, exactly `plate_1`, core/production XML namespaces, external `object_N.model` geometry and no assembly items. Python 3.11+ standard library is sufficient. Output/report parent directories must exist; existing files are preserved. Use official export for other versions or layouts.
+Supported format: producer `BambuStudio-02.07.01.62` or `BambuStudio-02.08.02.61` (same layout, checked against a real macOS CLI package), exactly `plate_1`, core/production XML namespaces, external `object_N.model` geometry and no assembly items. Python 3.11+ standard library is sufficient. Output/report parent directories must exist; existing files are preserved. Use official export for other versions or layouts.
 
 The converter validates XML and source embedded G-code MD5, rejects unsupported/multiple plates and ambiguous ZIP entries, removes geometry and compares every unaffected entry byte-for-byte. G-code, stored MD5, settings, warnings, plate metadata and previews are retained. The container SHA256 changes and must identify the actual dispatched artifact. Preserve the editable project and original ready package.
 
