@@ -47,8 +47,9 @@ Blender 管线使用 CPU 渲染。白色 FDM 模型可直接使用几何生成�
 
 ## 平台与软件配置
 
-- Python 工具支持 Linux 和 Windows，CI 覆盖 Python 3.11/3.12。WSL 可用于 Windows 上的 Linux 建模环境。
+- Python 工具支持 Linux、Windows 和 macOS，CI 覆盖 Python 3.11/3.12。WSL 可用于 Windows 上的 Linux 建模环境。
 - Blender 管线的运行参数和依赖配置见[模型处理管线](../skills/printable-modeling/references/model-pipeline.md)。
-- `make_slice_only.py` 接受 `BambuStudio-02.07.01.62` 生成的指定单盘容器布局；其他布局使用 Studio 官方导出，或先适配转换器。
+- 离线切片支持 Windows 版和 macOS 版 Bambu Studio（`/Applications/BambuStudio.app`），用宿主系统自带的 Python 运行 `run_bambu_slice.py`。Studio 预设通过 `inherits` 逐层继承，命令行不会展开；先用 `slice_pipeline.py resolve-profiles` 生成独立配置，否则用料和时间会算错。
+- `make_slice_only.py` 接受 `BambuStudio-02.07.01.62` 和 `02.08.02.61` 生成的指定单盘容器布局；其他布局使用 Studio 官方导出，或先适配转换器。
 - 打印机状态与相机配置见[Bambu LAN 使用说明](../skills/3d-print-workflow/references/bambu-lan.md)。机器参数和访问码放在本地配置中。
 - 宿主图像生成、浏览器和桌面控制均为可选能力；对应功能需要宿主提供工具，或由用户在相应应用中完成。

@@ -81,10 +81,30 @@ and displacement budgets. They change coordinates, not semantic anatomy, and
 must be followed by visual and geometry review. Read its `--help` and
 [model configuration](../../printable-modeling/references/model-pipeline.md).
 
+Flatten the Studio presets first: the CLI does not resolve their `inherits`
+chain, and an unresolved preset slices with missing keys (zero material weight,
+wrong times). On macOS the vendor presets are in
+`/Applications/BambuStudio.app/Contents/Resources/profiles/BBL`:
+
+```sh
+python skills/3d-print-workflow/scripts/slice_pipeline.py resolve-profiles \
+  --out /path/to/job/work/profiles \
+  --search /Applications/BambuStudio.app/Contents/Resources/profiles/BBL \
+  --machine "Bambu Lab A1 mini 0.4 nozzle" --process "0.20mm Standard @BBL A1M" \
+  --filament "Bambu PLA Basic @BBL A1M"
+```
+
+`--search` is repeatable (put a user preset folder first), and each selection may
+be a preset name or a JSON file. `profile-resolution.json` records every file in
+each chain with its hash.
+
 `3d-print-workflow/scripts/slice_pipeline.py prepare` makes an immutable
-positioned 3MF, copies exact profiles, and emits `launch.json`. On Windows,
-`run_bambu_slice.py --launch PATH` launches only the installed offline slicer,
-with a hidden window and bounded lifetime. `slice_pipeline.py collect` requires
+positioned 3MF, copies exact profiles, and emits `launch.json`; it refuses a
+preset that still has `inherits`. On Windows or macOS,
+`run_bambu_slice.py --launch PATH` (run with that host's own Python) launches
+only the installed offline slicer, with a bounded lifetime and, on Windows, a
+hidden window. It checks the installed version against the request (file
+version on Windows, the app bundle's version on macOS). `slice_pipeline.py collect` requires
 matching input hashes, execution receipt, native `result.json`, package checksum
 and installed slicer version. A shell exit code alone does not establish success.
 

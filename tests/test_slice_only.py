@@ -83,3 +83,13 @@ def test_unsupported_input_produces_no_output(tmp_path, load_helper, single_plat
     assert source.read_bytes() == original
     assert not output.exists()
     assert not report.exists()
+
+
+def test_verified_newer_producer_is_accepted_and_recorded(tmp_path, load_helper, single_plate_entries, write_package):
+    # 02.08.02.61 CLI packages were checked to have the same layout as 02.07.01.62.
+    helper = load_helper("slice_only")
+    single_plate_entries["3D/3dmodel.model"] = single_plate_entries["3D/3dmodel.model"].replace(
+        b"BambuStudio-02.07.01.62", b"BambuStudio-02.08.02.61")
+    source = write_package(tmp_path / "source.3mf", single_plate_entries)
+    report = helper.convert(source, tmp_path / "output.gcode.3mf", tmp_path / "report.json")
+    assert report["supported_producer"] == "BambuStudio-02.08.02.61"

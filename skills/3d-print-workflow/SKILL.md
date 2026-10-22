@@ -19,7 +19,10 @@ Use a separate directory in the user's workspace for each job. Preserve existing
 
 For V2 jobs, `scripts/slice_pipeline.py prepare` snapshots the exact mesh,
 positioned 3MF, machine/process/filament profiles and launch arguments.
-`scripts/run_bambu_slice.py` is the bounded Windows host launcher for the
+Studio presets inherit from parent presets and the CLI does not resolve that
+chain, so flatten them first with `scripts/slice_pipeline.py resolve-profiles`
+(`prepare` refuses a preset that still has `inherits`).
+`scripts/run_bambu_slice.py` is the bounded Windows/macOS host launcher for the
 installed offline Bambu CLI. `slice_pipeline.py collect` verifies its actual
 completion and records provenance. These helpers never send a print. Bind the
 receipt and actual Studio screenshots through the
