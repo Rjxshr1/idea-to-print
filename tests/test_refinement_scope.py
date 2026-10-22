@@ -66,7 +66,7 @@ def test_real_narrowed_profile_stays_unknown_after_other_stage_passes(
     geometry = job['refinement']['revisions']['v1']['geometry']
     report = json.loads(Path(geometry['report']['path']).read_text())
     assert report['overall'] == 'PASS'  # Actual subprocess gate result, not a mocked verdict.
-    assert report['checks']['self_intersection']['status'] == 'UNKNOWN'
+    assert report['checks']['minimum_wall']['status'] == 'UNKNOWN'
     assert geometry['status'] == 'UNKNOWN'
     coverage = geometry['coverage']
     assert coverage['gate_scoped_status'] == 'PASS'

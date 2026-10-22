@@ -107,8 +107,9 @@ package audit and filament summary for material figures.
 
 `preview_complete` describes a reviewed pre-print package. `print_ready` has the
 separate conservative geometry and review requirements: all 16 fixed geometry
-checks must PASS. The bundled `printability_gate.py` reports self-intersection,
-minimum wall/detail/connection, base contact and stability as `UNKNOWN` by
+checks must PASS. The bundled `printability_gate.py` measures self-intersection,
+and base contact and stability once the profile sets part-specific `base`
+thresholds. It still reports minimum wall/detail/connection as `UNKNOWN` by
 design, so with the bundled tools alone a job ends at `preview_complete`;
 `print_ready` needs a validator that actually covers those checks. An unresolved shape or
 manufacturing defect can still produce a diagnostic handoff, with FAIL/UNKNOWN

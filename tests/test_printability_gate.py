@@ -113,8 +113,11 @@ class TestSyntheticMeshes(unittest.TestCase):
         profile.pop("required_checks")
         report = self.run_mesh(self.box(), profile)
         self.assertEqual(report["overall"], "UNKNOWN")
-        self.assertIn("self_intersection", report["unknown_required_checks"])
-        self.assertIn("minimum_wall", report["unknown_required_checks"])
+        self.assertEqual(report["checks"]["self_intersection"]["status"], "PASS")
+        for key in ("minimum_wall", "minimum_detail", "minimum_connection"):
+            self.assertIn(key, report["unknown_required_checks"])
+        # Without part-specific base thresholds, contact and stability stay diagnostic.
+        self.assertIn("base_contact", report["unknown_required_checks"])
         self.assertIn("stability", report["unknown_required_checks"])
 
     def test_open_hole_fails(self):

@@ -45,8 +45,10 @@ A configurable `PASS / FAIL / UNKNOWN` geometry report belongs to one exported
 mesh and profile hash. Use the companion
 `3d-print-workflow/scripts/printability_gate.py` for its supported checks and
 retain unsupported checks as unknown. Scope wall/detail/connection targets by
-part, nozzle, material and intended handling. Sampling and visually plausible
-results do not establish a global minimum or a complete self-intersection test.
+part, nozzle, material and intended handling, and base contact/stability targets
+by how the object will stand. The gate tests self-intersection on every face
+pair; sampling and visually plausible results still do not establish a global
+thickness minimum.
 
 ## Execute and verify
 
