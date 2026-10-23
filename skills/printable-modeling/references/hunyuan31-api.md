@@ -36,7 +36,17 @@ the local limit from 0 to 7; it never removes the review requirement. Official
 Do not map rear-left to left-front or pass collages as independent views.
 
 Requests explicitly use API 2025-05-13, `Model="3.1"`,
-`GenerateType="Geometry"`, `FaceCount=1500000`, region `ap-guangzhou`.
+`GenerateType="Geometry"`, region `ap-guangzhou`.
+
+`FaceCount` defaults to `--face-count auto`: it reads the job's recorded target
+size (`brief.target_mm.longest_axis_including_base`) and requests triangles about
+`--detail-mm` across (default 0.25 mm, half a 0.4 mm line), estimating the
+surface as a sphere of that size. The result is kept between 100,000 and the
+official maximum of 1,500,000; a job without a target size uses 1,500,000. A
+50 mm figurine gets about 290,000 faces and anything from about 120 mm up gets
+1,500,000. Finer triangles than the printed line cannot show and only slow the
+Blender, geometry-gate and slicing steps. `--face-count N` (3,000 to 1,500,000)
+overrides it. The receipt records the sent value and `face_count_basis`.
 The official model default is 3.0, so omitting Model would change the route.
 Preserve the original downloaded high-poly file before any Blender processing.
 

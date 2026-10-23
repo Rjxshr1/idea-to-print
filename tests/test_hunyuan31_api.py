@@ -535,3 +535,41 @@ def test_kernel_job_lock_blocks_another_process_and_releases_after_death(api, jo
         process.wait(timeout=10)
     with api.job_lock(job):
         assert (job / ".hunyuan31.lock").is_file()
+
+
+def test_auto_face_count_follows_the_recorded_print_size(setup, api, job):
+    adapter, transport, budget, _, _ = setup
+    (job / "job.json").write_text(json.dumps({"brief": {"target_mm": {"longest_axis_including_base": 50}}}))
+    assert adapter.submit("source/front.png")["status"] == "SUBMITTED"
+    assert transport.submits[0]["FaceCount"] == 290000
+    receipt = adapter.read()
+    assert receipt["parameters"]["FaceCount"] == 290000
+    assert receipt["face_count_basis"]["target_mm"] == 50
+    assert receipt["face_count_basis"]["detail_mm"] == api.DEFAULT_DETAIL_MM
+
+
+def test_auto_face_count_is_bounded(api):
+    assert api.auto_face_count(10)[0] == api.AUTO_FACE_FLOOR
+    assert api.auto_face_count(400)[0] == api.FACE_COUNT_RANGE[1]
+    assert api.auto_face_count(None)[0] == api.FACE_COUNT_RANGE[1]
+    small, large = api.auto_face_count(60)[0], api.auto_face_count(90)[0]
+    assert small < large  # Smaller prints request fewer faces.
+    assert api.auto_face_count(60, detail_mm=0.5)[0] < small
+
+
+def test_explicit_face_count_is_sent_and_range_checked_before_any_request(setup, api):
+    adapter, transport, budget, _, _ = setup
+    for bad in (2999, 1500001, True, "many"):
+        with pytest.raises(api.AdapterError, match="FACE_COUNT_OUT_OF_RANGE"):
+            adapter.submit("source/front.png", face_count=bad)
+    assert transport.submits == [] and budget.starts == 0
+    assert adapter.submit("source/front.png", face_count=400000)["status"] == "SUBMITTED"
+    assert transport.submits[0]["FaceCount"] == 400000
+    assert adapter.read()["face_count_basis"] == {"mode": "explicit"}
+
+
+def test_cli_rejects_a_non_numeric_face_count_without_submitting(api, job, monkeypatch, capsys):
+    monkeypatch.setattr(api.Hunyuan31Adapter, "submit", lambda *a, **k: pytest.fail("must not submit"))
+    assert api.main(["submit", "--job", str(job), "--attempt", "g1", "--main", "source/front.png",
+                     "--face-count", "lots"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == "FACE_COUNT_OUT_OF_RANGE"

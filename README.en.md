@@ -15,7 +15,7 @@ The project provides **three installable agent skills and Python tools** connect
 | Feature | Capabilities |
 |---|---|
 | Text and image input | Concept selection or direct PNG/JPEG/WebP intake, preserving original bytes and SHA256 |
-| Official image-to-3D API | Tencent Hunyuan3D 3.1 SDK adapter with a main image, named additional views and 1.5-million-face Geometry requests |
+| Official image-to-3D API | Tencent Hunyuan3D 3.1 SDK adapter with a main image, named additional views and Geometry requests whose face count follows the print size (up to 1.5 million) |
 | Staged shape review | Reference consistency, silhouette and volume, followed by fur, scales or feathers; separate visual and manufacturing results |
 | Blender processing | Preserve high-poly source; export STL, GLB, BLEND and a lightweight proxy; normalize size or retain millimetre coordinates |
 | Regional refinement | Scoped softening, tip blunting and root thickening with protected regions and displacement limits |

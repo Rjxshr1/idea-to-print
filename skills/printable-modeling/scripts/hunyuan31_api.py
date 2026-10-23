@@ -15,6 +15,7 @@ import importlib
 import importlib.util
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -31,6 +32,9 @@ REGION = "ap-guangzhou"
 VERSION = "2025-05-13"
 SLOTS = frozenset(("left", "right", "back", "top", "bottom", "left_front", "right_front"))
 PARAMS = {"Model": "3.1", "GenerateType": "Geometry", "FaceCount": 1500000}
+FACE_COUNT_RANGE = (3000, 1500000)  # Official SubmitHunyuanTo3DProJob limits.
+AUTO_FACE_FLOOR = 100000  # Keeps enough geometry for local refinement of small prints.
+DEFAULT_DETAIL_MM = 0.25  # About half a 0.4 mm line width.
 MAX_DOWNLOAD = 1024 * 1024 * 1024
 
 
@@ -188,7 +192,41 @@ def workflow_module():
     return importlib.import_module("workflow_v2")
 
 
-def payload_for(root, main, views=None, review=None, max_supplemental=2):
+def auto_face_count(target_mm, detail_mm=DEFAULT_DETAIL_MM):
+    """Faces needed for triangles about `detail_mm` across on a print `target_mm` long.
+
+    The surface of a compact sculpture is taken as that of a sphere of the same
+    size (pi * L^2), which is generous for most figurines. Finer triangles than
+    the printed line cannot show, so larger requests only slow later steps.
+    """
+    if target_mm is None:
+        return FACE_COUNT_RANGE[1], {"mode": "auto", "reason": "no target size recorded; using the maximum"}
+    triangle = math.sqrt(3) / 4 * detail_mm ** 2
+    estimate = math.pi * target_mm ** 2 / triangle
+    faces = int(min(FACE_COUNT_RANGE[1], max(AUTO_FACE_FLOOR, round(estimate, -4))))
+    return faces, {"mode": "auto", "target_mm": target_mm, "detail_mm": detail_mm,
+                   "estimated_faces": int(estimate), "floor": AUTO_FACE_FLOOR, "cap": FACE_COUNT_RANGE[1]}
+
+
+def resolve_face_count(root, face_count="auto", detail_mm=DEFAULT_DETAIL_MM):
+    if face_count != "auto":
+        if isinstance(face_count, bool) or not isinstance(face_count, int) or not (
+                FACE_COUNT_RANGE[0] <= face_count <= FACE_COUNT_RANGE[1]):
+            raise AdapterError("FACE_COUNT_OUT_OF_RANGE")
+        return face_count, {"mode": "explicit"}
+    if not (isinstance(detail_mm, (int, float)) and math.isfinite(detail_mm) and 0.05 <= detail_mm <= 2):
+        raise AdapterError("DETAIL_MM_OUT_OF_RANGE")
+    try:
+        job = json.loads((root / "job.json").read_text(encoding="utf-8"))
+        target = job.get("brief", {}).get("target_mm", {}).get("longest_axis_including_base")
+    except (OSError, ValueError, AttributeError):
+        target = None
+    if not (isinstance(target, (int, float)) and not isinstance(target, bool) and math.isfinite(target) and target > 0):
+        target = None
+    return auto_face_count(target, detail_mm)
+
+
+def payload_for(root, main, views=None, review=None, max_supplemental=2, face_count=PARAMS["FaceCount"]):
     views = views or {}
     if not 0 <= max_supplemental <= 7 or len(views) > max_supplemental:
         raise AdapterError("SUPPLEMENTAL_VIEW_LIMIT")
@@ -233,7 +271,7 @@ def payload_for(root, main, views=None, review=None, max_supplemental=2):
         if any(reviewed.get(item["path"]) != item["sha256"] for item in records):
             raise AdapterError("VIEW_REVIEW_STALE_OR_INCOMPLETE")
         review_record = {"path": str(review_path.relative_to(root)), "sha256": digest(review_path)}
-    payload = dict(PARAMS, ImageBase64=encoded.pop("front"))
+    payload = dict(PARAMS, FaceCount=face_count, ImageBase64=encoded.pop("front"))
     if views:
         payload["MultiViewImages"] = [
             {"ViewType": slot, "ViewImageBase64": data} for slot, data in sorted(encoded.items())
@@ -358,7 +396,8 @@ class Hunyuan31Adapter:
         self.settle(receipt, "uncertain")
         return safe_status(receipt)
 
-    def submit(self, main, *, views=None, review=None, max_supplemental=2):
+    def submit(self, main, *, views=None, review=None, max_supplemental=2, face_count="auto",
+               detail_mm=DEFAULT_DETAIL_MM):
         with job_lock(self.root):
             if self.receipt_path.exists():
                 # Even an explicit repeated submit is a read, never another request.
@@ -366,8 +405,9 @@ class Hunyuan31Adapter:
                 if not receipt.get("job_id") and receipt["status"] == "SUBMITTING":
                     return self.mark_unknown(receipt, "SUBMISSION_RESPONSE_LOST")
                 return safe_status(receipt)
+            faces, face_basis = resolve_face_count(self.root, face_count, detail_mm)
             payload, inputs, reviewed = payload_for(
-                self.root, main, views, review, max_supplemental)
+                self.root, main, views, review, max_supplemental, faces)
             api = self.api()  # Config/SDK checks happen before reserving a paid attempt.
             ledger = self.budget()
             ledger.init(self.root)
@@ -377,7 +417,8 @@ class Hunyuan31Adapter:
             receipt = {
                 "schema_version": 1, "provider": "hunyuan31-api", "attempt_id": self.attempt,
                 "status": "SUBMITTING", "created_at": self.clock(), "budget_status": "running",
-                "region": REGION, "api_version": VERSION, "parameters": dict(PARAMS),
+                "region": REGION, "api_version": VERSION, "parameters": dict(PARAMS, FaceCount=faces),
+                "face_count_basis": face_basis,
                 "inputs": inputs, "view_review": reviewed,
                 "payload_sha256": hashlib.sha256(
                     json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
@@ -576,6 +617,10 @@ def main(argv=None):
             command.add_argument("--view", action="append", default=[], metavar="SLOT=PATH")
             command.add_argument("--review")
             command.add_argument("--max-supplemental", type=int, default=2, choices=range(0, 8))
+            command.add_argument("--face-count", default="auto",
+                                 help="auto (from the job's target size) or 3000..1500000")
+            command.add_argument("--detail-mm", type=float, default=DEFAULT_DETAIL_MM,
+                                 help="Target triangle size for --face-count auto (default %(default)s mm)")
         else:
             command.add_argument("--retries", type=int, default=3, choices=range(1, 6))
     args = parser.parse_args(argv)
@@ -595,8 +640,14 @@ def main(argv=None):
                     if slot in views:
                         raise AdapterError("DUPLICATE_VIEW_SLOT")
                     views[slot] = filename
+                face_count = args.face_count
+                if face_count != "auto":
+                    if not face_count.isdigit():
+                        raise AdapterError("FACE_COUNT_OUT_OF_RANGE")
+                    face_count = int(face_count)
                 result = adapter.submit(args.main, views=views, review=args.review,
-                                        max_supplemental=args.max_supplemental)
+                                        max_supplemental=args.max_supplemental,
+                                        face_count=face_count, detail_mm=args.detail_mm)
             else:
                 result = getattr(adapter, args.command)(retries=args.retries)
             code = 2 if result["status"] in ("UNKNOWN", "FAILED") else 0
