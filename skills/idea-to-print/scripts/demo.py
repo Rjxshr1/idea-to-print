@@ -25,6 +25,7 @@ SCRIPTS = {
     "audit": SKILLS / "3d-print-workflow/scripts/print_audit.py",
     "slice": SKILLS / "3d-print-workflow/scripts/slice_pipeline.py",
     "launch": SKILLS / "3d-print-workflow/scripts/run_bambu_slice.py",
+    "viewer": SKILLS / "printable-modeling/scripts/make_viewer.py",
 }
 # Bambu system preset names checked against Bambu Studio 02.08.02.61; bed is X, Y, Z in mm.
 PRINTERS = {
@@ -155,9 +156,14 @@ def main(argv=None):
     print("dimensions_mm:", [round(x, 1) for x in audit["dimensions_mm"]],
           "| volume_cm3:", round(audit["signed_volume_mm3"] / 1000, 1))
 
+    step("5. Turntable / AR page")
+    page = job / "outputs" / "demo-cat.html"
+    run("viewer", "--model", mesh, "--output", page, "--title", "Demo cat")
+    print(f"open {page} in a browser; host it over HTTPS to place it on a table in AR")
+
     sliced = None
     if args.slice:
-        step(f"5. Offline slice ({args.printer}); never sent to a printer")
+        step(f"6. Offline slice ({args.printer}); never sent to a printer")
         found = find_bambu()
         if not found:
             print("Bambu Studio not found in the default location; skipped.")

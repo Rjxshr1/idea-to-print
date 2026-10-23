@@ -20,6 +20,7 @@ The project provides **three installable agent skills and Python tools** connect
 | Blender processing | Preserve high-poly source; export STL, GLB, BLEND and a lightweight proxy; normalize size or retain millimetre coordinates |
 | Regional refinement | Scoped softening, tip blunting and root thickening with protected regions and displacement limits |
 | Actual mesh previews | Render the final STL from six views, add face close-ups and resume missing renders after interruption |
+| 3D turntable / AR page | Convert the STL to a real-size GLB and write a shareable page: slow turntable, drag and zoom, printed size, and real-size AR placement on a phone |
 | Shared job ledger | `next/status/record/reconcile/export` track stages, attempts, remote tasks and evidence; candidate, best and delivered revisions stay separate |
 | Bounded recovery | Defaults of two generations, three repairs and one reference correction; stop strategies without improvement and resume known remote jobs |
 | Bambu slicing | Preset inheritance flattening, fixed placement, machine/process/filament snapshots, a Windows/macOS offline CLI launcher and native-result verification |
@@ -78,7 +79,7 @@ With `requirements.txt` and `requirements-modeling.txt` installed, run the whole
 python skills/idea-to-print/scripts/demo.py --out demo
 ```
 
-It creates a job from a synthetic reference image, builds a cat figurine on a round base, runs all 16 geometry checks and the mesh audit, and prints each real command it runs. With a local Bambu Studio (Windows or macOS), `--slice` also flattens the presets and slices offline; `--printer` picks `a1mini`, `a1`, `p1s` or `x1c`. Nothing is sent to a printer.
+It creates a job from a synthetic reference image, builds a cat figurine on a round base, runs all 16 geometry checks and the mesh audit, writes a 3D turntable / AR page, and prints each real command it runs. With a local Bambu Studio (Windows or macOS), `--slice` also flattens the presets and slices offline; `--printer` picks `a1mini`, `a1`, `p1s` or `x1c`. Nothing is sent to a printer.
 
 ## Command-line entry points
 
