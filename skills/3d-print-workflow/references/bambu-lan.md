@@ -23,6 +23,31 @@ python skills/3d-print-workflow/scripts/bambu_read.py --profile printer.local.js
 
 These commands contact the configured printer. Do not run them as an installation or offline test against someone else's device.
 
+## Timelapse of a running print
+
+`scripts/print_timelapse.py` uses the same two reads to record a print: it polls
+status and saves one camera frame each time the layer number changes (or every
+`--interval` seconds), plus a last frame of the finished part, until the printer
+reports FINISH, FAILED or IDLE after an active phase. A state that was already
+finished when capture started is not taken as this print. It never starts,
+pauses or moves anything. Frames and a `frames.jsonl` log (time, layer, total
+layers, percent, task id, hash) go in the capture directory; keep it private.
+
+```sh
+python skills/3d-print-workflow/scripts/print_timelapse.py capture --profile printer.local.json \
+  --studio-config /path/to/BambuStudio.conf --out jobs/example/work/timelapse
+python skills/3d-print-workflow/scripts/print_timelapse.py render --capture jobs/example/work/timelapse \
+  --output jobs/example/outputs/timelapse.mp4 \
+  --intro jobs/example/source/selected.png --outro jobs/example/outputs/photo.jpg
+```
+
+Capture contacts the printer for the whole print, so leave it running on a
+machine on the same LAN. Rendering is offline: `.mp4` needs ffmpeg, `.gif` uses
+Pillow only. Each frame gets a layer/progress caption (`--no-captions` removes
+it); `--intro` and `--outro` hold an image for two seconds at the start and end.
+One camera view may not show the whole plate, and a timelapse is not evidence of
+print quality.
+
 ## Trust and output limits
 
 The experimental legacy adapter accepts printer-issued/self-signed TLS certificates without certificate verification, on LAN ports 8883 (telemetry) or 6000 (camera). This encrypts transport but does not authenticate the host's identity. Scope it to a trusted private LAN and a verified printer address; an untrusted host could receive the device access code. It is not appropriate for public hosts or a generic web API client. No certificate provisioning or verification implementation is included.

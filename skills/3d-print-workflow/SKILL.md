@@ -13,7 +13,7 @@ For an installed skill, resolve scripts from this actual `SKILL.md` directory. R
 
 Preserve downloaded models and their author/license, selected profile and original files. A model download, editable slicer project and sliced print package are different artifacts. Use the companion `printable-modeling` skill for geometry creation or changes, including a user-uploaded image. Scaling someone else's sculpture is not original modeling.
 
-Use a separate directory in the user's workspace for each job. Preserve existing queues and order; inspection of one job does not authorize another. Record the real printer build volume, nozzle, plate, material and connection method. There is no default owner's printer. For optional Bambu LAN status/camera access, read [bambu-lan.md](references/bambu-lan.md); this adapter is read-only and experimental.
+Use a separate directory in the user's workspace for each job. Preserve existing queues and order; inspection of one job does not authorize another. Record the real printer build volume, nozzle, plate, material and connection method. There is no default owner's printer. For optional Bambu LAN status/camera access, read [bambu-lan.md](references/bambu-lan.md); this adapter is read-only and experimental. `scripts/print_timelapse.py` uses it to record a layer-by-layer timelapse when the user asks for one.
 
 ## Prepare and size
 

@@ -19,12 +19,14 @@ The project provides **three installable agent skills and Python tools** connect
 | Staged shape review | Reference consistency, silhouette and volume, followed by fur, scales or feathers; separate visual and manufacturing results |
 | Blender processing | Preserve high-poly source; export STL, GLB, BLEND and a lightweight proxy; normalize size or retain millimetre coordinates |
 | Regional refinement | Scoped softening, tip blunting and root thickening with protected regions and displacement limits |
+| Name plate | Put a figurine on a rounded plate with a raised name (any script the font covers) and optional date, thickening strokes too thin to print, merged into one printable solid |
 | Actual mesh previews | Render the final STL from six views, add face close-ups and resume missing renders after interruption |
 | 3D turntable / AR page | Convert the STL to a real-size GLB and write a shareable page: slow turntable, drag and zoom, printed size, and real-size AR placement on a phone |
 | Shared job ledger | `next/status/record/reconcile/export` track stages, attempts, remote tasks and evidence; candidate, best and delivered revisions stay separate |
 | Bounded recovery | Defaults of two generations, three repairs and one reference correction; stop strategies without improvement and resume known remote jobs |
 | Bambu slicing | Preset inheritance flattening, fixed placement, machine/process/filament snapshots, a Windows/macOS offline CLI launcher and native-result verification |
 | Preview and delivery | Open exact extracted G-code, retain layer screenshots, and export models, slices, review history and a file manifest |
+| Print timelapse | One frame per layer from the printer's own camera while it prints (read-only), rendered to MP4/GIF with layer/progress captions and optional reference-image intro and finished-part outro |
 
 Owner and agent judgments are stored separately. An agent review cannot erase an owner's rejection of the same mesh. Changed models, profiles or images invalidate affected checks. Results retain `PASS / FAIL / UNKNOWN`; exhausted attempts produce the best candidate with outstanding work. The bundled geometry gate tests every face pair for self-intersection and, once the profile sets part-specific thresholds, measures wall, detail and connection thickness on every face, base contact area and centre-of-mass stability (for both solid and hollow-shell mass models, reporting the worst). A check without its threshold stays `UNKNOWN` and the job ends at `preview_complete`; `print_ready` needs every geometry check to pass plus the appearance and slice reviews. A job directory can be moved or renamed as a whole; recorded evidence paths follow it.
 
