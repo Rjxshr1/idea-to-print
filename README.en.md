@@ -19,6 +19,7 @@ The project provides **three installable agent skills and Python tools** connect
 | Staged shape review | Reference consistency, silhouette and volume, followed by fur, scales or feathers; separate visual and manufacturing results |
 | Blender processing | Preserve high-poly source; export STL, GLB, BLEND and a lightweight proxy; normalize size or retain millimetre coordinates |
 | Regional refinement | Scoped softening, tip blunting and root thickening with protected regions and displacement limits |
+| Name plate | Put a figurine on a rounded plate with a raised name (any script the font covers) and optional date, thickening strokes too thin to print, merged into one printable solid |
 | Actual mesh previews | Render the final STL from six views, add face close-ups and resume missing renders after interruption |
 | Shared job ledger | `next/status/record/reconcile/export` track stages, attempts, remote tasks and evidence; candidate, best and delivered revisions stay separate |
 | Bounded recovery | Defaults of two generations, three repairs and one reference correction; stop strategies without improvement and resume known remote jobs |
