@@ -83,6 +83,16 @@ python install.py --destination ~/.agents/skills
 
 图像生成与桌面控制由 Agent 宿主提供。混元官方 API 需要腾讯云凭据和可用额度；Blender 与切片在本地运行，云端图生 3D 不占用本机推理显存。
 
+## 一键体验
+
+装好 `requirements.txt` 和 `requirements-modeling.txt` 后，离线跑一遍完整流程，不需要账号、网络或打印机：
+
+```bash
+python skills/idea-to-print/scripts/demo.py --out demo
+```
+
+它用一张合成参考图建作业，生成一只坐在圆底座上的小猫雕塑，跑完 16 项几何检查和网格审计，并打印每一步的实际命令。本机装有 Bambu Studio（Windows 或 macOS）时，加 `--slice` 还会展开预设并离线切片，`--printer` 可选 `a1mini`、`a1`、`p1s`、`x1c`。切片结果不会发送到打印机。
+
 ## 命令行入口
 
 创建图片作业并查看下一步：
@@ -98,6 +108,36 @@ python skills/idea-to-print/scripts/workflow_v2.py status --job jobs/my-sculptur
 
 # 检查官方 API 配置，不发起生成
 python skills/printable-modeling/scripts/hunyuan31_api.py config-check
+```
+
+检查模型几何（配置文件以 `printability-profile.example.json` 为模板，按零件填写阈值），退出码 0=PASS、2=FAIL、3=UNKNOWN：
+
+```bash
+python skills/3d-print-workflow/scripts/printability_gate.py inspect \
+  --mesh jobs/my-sculpture/outputs/model-v1.stl \
+  --profile jobs/my-sculpture/work/printability-profile.json \
+  --out jobs/my-sculpture/work/geometry-v1.json
+```
+
+离线切片（以 macOS 上的 A1 mini 为例；Windows 的预设目录在 Studio 安装目录下的 `resources/profiles/BBL`）：
+
+```bash
+python skills/3d-print-workflow/scripts/slice_pipeline.py resolve-profiles \
+  --out jobs/my-sculpture/work/profiles \
+  --search /Applications/BambuStudio.app/Contents/Resources/profiles/BBL \
+  --machine "Bambu Lab A1 mini 0.4 nozzle" --process "0.20mm Standard @BBL A1M" \
+  --filament "Bambu PLA Basic @BBL A1M"
+
+python skills/3d-print-workflow/scripts/slice_pipeline.py prepare \
+  --mesh jobs/my-sculpture/outputs/model-v1.stl --out jobs/my-sculpture/work/slice-v1 \
+  --machine jobs/my-sculpture/work/profiles/machine.json \
+  --process jobs/my-sculpture/work/profiles/process.json \
+  --filament jobs/my-sculpture/work/profiles/filament.json \
+  --slicer /Applications/BambuStudio.app/Contents/MacOS/BambuStudio \
+  --slicer-version 02.08.02.61 --bed 180 180 180
+
+python skills/3d-print-workflow/scripts/run_bambu_slice.py --launch jobs/my-sculpture/work/slice-v1/launch.json
+python skills/3d-print-workflow/scripts/slice_pipeline.py collect --run jobs/my-sculpture/work/slice-v1
 ```
 
 参考检查通过后，由 Agent 提交生成、记录实际结果并继续下一阶段。提交响应不确定且没有 JobId 时停止重投；已有 JobId 则继续查询同一任务，下载失败只恢复下载。
