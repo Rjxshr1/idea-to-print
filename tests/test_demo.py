@@ -19,6 +19,7 @@ def test_demo_passes_all_geometry_checks_without_slicer(tmp_path, monkeypatch, c
     assert demo.main(["--out", str(out), "--slice"]) == 0
     report = json.loads((out / "job/work/geometry.json").read_text())
     assert report["overall"] == "PASS"
+    assert "model-viewer" in (out / "job/outputs/demo-cat.html").read_text()
     assert all(check["status"] == "PASS" for check in report["checks"].values() if check["category"] == "geometry")
     job = json.loads((out / "job/job.json").read_text())
     assert job["workflow_v2"]["schema_version"] == 2
