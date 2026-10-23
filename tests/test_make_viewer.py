@@ -35,7 +35,7 @@ def test_page_embeds_a_real_size_y_up_glb(stl, tmp_path):
     import trimesh
     out = tmp_path / "part.html"
     result = viewer.make(stl, out, title="Bracket <v1>")
-    page = out.read_text()
+    page = out.read_text(encoding="utf-8")
     assert result["embedded"] and result["size_mm"] == [40.0, 30.0, 20.0] and result["volume_cm3"] == 24.0
     data = embedded_glb(page)
     assert data[:4] == b"glTF"
@@ -53,7 +53,7 @@ def test_external_glb_and_no_overwrite(stl, tmp_path):
     out = tmp_path / "part.html"
     result = viewer.make(stl, out, external=True)
     assert not result["embedded"] and Path(result["glb"]).read_bytes()[:4] == b"glTF"
-    assert 'src="part.glb"' in out.read_text()
+    assert 'src="part.glb"' in out.read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="overwrite"):
         viewer.make(stl, out)
 
